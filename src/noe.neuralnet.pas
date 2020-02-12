@@ -13,7 +13,7 @@ unit noe.neuralnet;
 interface
 
 uses
-  Classes, fgl, noe, noe.Math, noe.utils, SysUtils;
+  Classes, fgl, math, noe, noe.Math, noe.utils, SysUtils;
 
 type
   TLayer = class;
@@ -22,12 +22,14 @@ type
   TVariableList = specialize TFPGList<TVariable>;
   TLayerList    = specialize TFPGList<TLayer>;
 
+  TBatchNormLayer = class;
   TDenseLayer     = class;
   TDropoutLayer   = class;
   TLeakyReLULayer = class;
   TReLULayer      = class;
   TSigmoidLayer   = class;
   TSoftMaxLayer   = class;
+  TTanhLayer      = class;
 
   { TLayer Base class }
 
@@ -37,6 +39,18 @@ type
   public
     function Eval(X: TVariable): TVariable; virtual; abstract;
     function GetParams: TVariableArr;
+  end;
+
+  { TBatchNormLayer }
+
+  TBatchNormLayer = class(TLayer)
+  private
+    FGamma, FBeta: TVariable;
+  public
+    constructor Create;
+    function Eval(X: TVariable): TVariable; override;
+    property Gamma: TVariable read FGamma write FGamma;
+    property Beta: TVariable read FBeta write FBeta;
   end;
 
   { TDenseLayer, or fully-connected layer }
@@ -96,6 +110,13 @@ type
     function Eval(X: TVariable): TVariable; override;
   end;
 
+  { TTanhLayer }
+
+  TTanhLayer = class(TLayer)
+  public
+    function Eval(X: TVariable): TVariable; override;
+  end;
+
   { TModel }
 
   TModel = class
@@ -108,11 +129,23 @@ type
     procedure AddLayer(Layer: TLayer);
   end;
 
+  TBatchingResult = record
+    Xbatches, ybatches: TTensorArr;
+    BatchCount: longint;
+  end;
+
 { Loss functions }
 function AccuracyScore(predicted, actual: TTensor): double;
 function BinaryCrossEntropyLoss(ypred, ytrue: TVariable): TVariable;
 function CrossEntropyLoss(ypred, ytrue: TVariable): TVariable;
 function L2Regularization(Model: TModel; Lambda: double = 0.001): TVariable;
+
+{ Utilities }
+function CreateBatch(X: TTensor; BatchSize: integer): TTensorArr;
+function CreateBatch(X, y: TTensor; BatchSize: integer): TBatchingResult;
+function Im2Col(img: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
 
 
 implementation
@@ -144,6 +177,94 @@ begin
   Result     := Lambda * Result;
 end;
 
+function Im2ColGetPixel(img: TTensor;
+  Height, Width, channels, row, col, channel, padH, padW: longint): double;
+var
+  r, c: longint;
+begin
+  r := row - padH;
+  c := col - padW;
+
+  if ((r < 0) or (c < 0) or (r >= Height) or (c >= Width)) then
+    Exit(0);
+  Exit(img.Val[c + Width * (r + Height * channel)]);
+end;
+
+function CreateBatch(X: TTensor; BatchSize: integer): TTensorArr;
+var
+  i, OutSize: longint;
+  isSet: boolean = False;
+  prevID: longint;
+begin
+  OutSize := ceil(X.Shape[0] / BatchSize);
+  SetLength(Result, OutSize);
+  for i := 0 to OutSize - 1 do
+    Result[i] := GetRowRange(X, i * BatchSize,
+      Math.min(BatchSize, X.Shape[0] - i * BatchSize));//if not isSet then
+  //begin
+  //  prevID := Result[i].ID;
+  //  isSet  := True;
+  //end;
+
+end;
+
+function CreateBatch(X, y: TTensor; BatchSize: integer): TBatchingResult;
+var
+  i, OutSize: longint;
+  isSet: boolean = False;
+  prevID: longint;
+begin
+  Assert(X.Shape[0] = y.Shape[0], 'X and y have different height');
+  OutSize := ceil(X.Shape[0] / BatchSize);
+
+  SetLength(Result.Xbatches, OutSize);
+  SetLength(Result.ybatches, OutSize);
+  Result.BatchCount := OutSize;
+
+  for i := 0 to OutSize - 1 do
+  begin
+    Result.Xbatches[i] := GetRowRange(X, i * BatchSize,
+      Math.min(BatchSize, X.Shape[0] - i * BatchSize));
+    Result.ybatches[i] := GetRowRange(y, i * BatchSize,
+      Math.min(BatchSize, y.Shape[0] - i * BatchSize));
+  end;
+
+end;
+
+
+function Im2Col(img: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
+var
+  ConvOutHeight, ConvOutWidth: longint;
+  ChannelsCol, c, h, w, wOffset, hOffset, cIm: longint;
+  ImRow, ImCol, colIdx: longint;
+begin
+  ConvOutHeight := (Height + 2 * PaddingHeight - FilterH) div StrideHeight + 1;
+  ConvOutWidth  := (Width + 2 * PaddingWidth - FilterW) div StrideWidth + 1;
+  ChannelsCol   := Channels * FilterH * FilterW;
+
+  SetLength(Result.Val, Channels * FilterH * FilterW * ConvOutHeight * ConvOutWidth);
+  Result.ReshapeInplace([Channels * FilterH * FilterW, ConvOutHeight * ConvOutWidth]);
+  for c := 0 to ChannelsCol - 1 do
+  begin
+    wOffset := c mod FilterW;
+    hOffset := (c div FilterW) mod FilterH;
+    cIm     := c div FilterH div FilterW;
+    for h := 0 to ConvOutHeight - 1 do
+      for w := 0 to ConvOutWidth - 1 do
+      begin
+        ImRow  := hOffset + h * StrideHeight;
+        ImCol  := wOffset + w * StrideWidth;
+        colIdx := (c * ConvOutHeight + h) * ConvOutWidth + w;
+
+        Result.Val[colIdx] := Im2ColGetPixel(img, Height, Width,
+          Channels, ImRow, ImCol, cIm, PaddingHeight, PaddingWidth);
+      end;
+  end;
+
+end;
+
 function AccuracyScore(predicted, actual: TTensor): double;
 var
   i: integer;
@@ -157,11 +278,41 @@ begin
   Result  := tot / predicted.Size;
 end;
 
+{ TBatchNormLayer }
+
+constructor TBatchNormLayer.Create;
+begin
+  self.Beta  := 0;
+  self.Gamma := 1;
+
+  self.Beta.Data.ReshapeInplace([1, 1]);
+  self.Gamma.Data.ReshapeInplace([1, 1]);
+
+  self.Beta.RequiresGrad  := True;
+  self.Gamma.RequiresGrad := True;
+end;
+
+function TBatchNormLayer.Eval(X: TVariable): TVariable;
+var
+  muB, varB: TVariable;
+begin
+  muB    := Mean(X, 0);
+  varB   := Sum(Sqr(X - muB), 0) / X.Shape[0];
+  Result := self.Gamma * ((X - muB) / Sqrt(varB + 1e-8)) + self.Beta;
+end;
+
+{ TTanhLayer }
+
+function TTanhLayer.Eval(X: TVariable): TVariable;
+begin
+  Result := Tanh(X);
+end;
+
 { TSigmoidLayer }
 
 function TSigmoidLayer.Eval(X: TVariable): TVariable;
 begin
-  Result := 1 / 1 + (Exp(-X));
+  Result := 0.5 * (Tanh(X / 2) + 1);
 end;
 
 { TLeakyReLULayer }
@@ -238,7 +389,7 @@ begin
 
   { Xavier weight initialization }
   W      := TVariable.Create(RandomTensorNormal([InSize, OutSize]) *
-    1 / (InSize ** 0.5));
+    ((2 / (InSize + OutSize)) ** 0.5));
   b      := TVariable.Create(CreateTensor([1, OutSize], 0));
   b.Name := 'Bias' + IntToStr(b.ID);
   SetRequiresGrad([W, b], True);

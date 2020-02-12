@@ -16,7 +16,7 @@
 
 unit noe.Math;
 
-{$mode objfpc}{$H+}{$INLINE ON}
+{$mode objfpc}{$H+}//{$INLINE ON}
 
 interface
 
@@ -32,8 +32,8 @@ type
   TBFunc = function(v1, v2: double): double;
 
 { Helper to apply a function on each tensor's element }
-function ApplyUfunc(A: TTensor; Func: TUFunc): TTensor; inline;
-function ApplyBfunc(A, B: TTensor; Func: TBFunc): TTensor; inline;
+function ApplyUfunc(A: TTensor; Func: TUFunc): TTensor;
+function ApplyBfunc(A, B: TTensor; Func: TBFunc): TTensor;
 function IsBlasfuncAvailable(Func: Pointer): boolean;
 
 { Some of functions belong to system unit are in different format. Hence, they
@@ -43,48 +43,51 @@ function Sin_F(x: double): double;
 function Cos_F(x: double): double;
 function Exp_F(x: double): double;
 function Ln_F(x: double): double;
-function AddF(v1, v2: double): double; inline;
-function SubtractF(v1, v2: double): double; inline;
-function DivideF(v1, v2: double): double; inline;
-function MultiplyF(v1, v2: double): double; inline;
+function AddF(v1, v2: double): double;
+function SubtractF(v1, v2: double): double;
+function DivideF(v1, v2: double): double;
+function MultiplyF(v1, v2: double): double;
 
 { TTensor math ----------------------------------------------------------------}
 
-{ binary functions for tensors }
-function Add(A, B: TTensor): TTensor; inline;
-function Convolve2D(A, w: TTensor): TTensor; inline;
-function Subtract(A, B: TTensor): TTensor; inline;
-function Divide(A, B: TTensor): TTensor; inline;
-function Multiply(A, B: TTensor): TTensor; inline;
-function MatMul(A, B: TTensor): TTensor; inline;
-
-{ unary functions for tensors }
-function ArgMax(M: TTensor): TTensor; inline; overload;
-function ArgMax(M: TTensor; axis: byte): TTensor; inline; overload;
-function Max(M: TTensor): TTensor; inline;
-function Max(M: TTensor; axis: byte): TTensor; inline; overload;
-function Mean(M: TTensor): TTensor; inline;
-function Mean(M: TTensor; axis: byte): TTensor; inline; overload;
-function DegToRad(A: TTensor): TTensor;
-function RadToDeg(A: TTensor): TTensor;
+function Add(A, B: TTensor): TTensor;
+function ArgMax(M: TTensor): TTensor;
+function ArgMax(M: TTensor; axis: byte): TTensor; overload;
+//function Convolve2D(A, w: TTensor): TTensor;
 function Cos(A: TTensor): TTensor;
 function Cosh(A: TTensor): TTensor;
+function DegToRad(A: TTensor): TTensor;
+function Divide(A, B: TTensor): TTensor;
 function Exp(A: TTensor): TTensor;
-function LeakyReLU(A: TTensor; v: double): TTensor; overload;
+function LeakyReLU(A: TTensor; v: double): TTensor;
 function Log10(A: TTensor): TTensor;
 function Log2(A: TTensor): TTensor;
 function Log(A: TTensor): TTensor;
-function Tan(A: TTensor): TTensor;
-function Tanh(A: TTensor): TTensor;
+function MatMul(A, B: TTensor): TTensor;
+function Min(M: TTensor): TTensor;
+function Max(M: TTensor): TTensor;
+function Max(M: TTensor; axis: byte): TTensor;
+function Mean(M: TTensor): TTensor;
+function Mean(M: TTensor; axis: byte): TTensor;
+function Multiply(A, B: TTensor): TTensor;
 function Power(A: TTensor; exponent: double): TTensor; overload;
 function Power(A, B: TTensor): TTensor; overload;
+function RadToDeg(A: TTensor): TTensor;
 function ReLU(T: TTensor): TTensor;
 function Sin(A: TTensor): TTensor;
 function Sigmoid(A: TTensor): TTensor;
 function Sinh(A: TTensor): TTensor;
-function SoftMax(A: TTensor; axis: byte): TTensor; inline;
-function Sum(M: TTensor): TTensor; inline;
-function Sum(M: TTensor; axis: byte): TTensor; inline; overload;
+function SoftMax(A: TTensor; axis: byte): TTensor;
+function Subtract(A, B: TTensor): TTensor;
+function Sum(M: TTensor): TTensor;
+function Sum(M: TTensor; axis: byte): TTensor; overload;
+function Tan(A: TTensor): TTensor;
+function Tanh(A: TTensor): TTensor;
+function Transpose(T: TTensor; dims: array of longint): TTensor;
+function Transpose(T: TTensor): TTensor;
+function Transpose2D(T: TTensor): TTensor;
+function TransposeTensor(X: TTensor; axis: array of longint): TTensor;
+
 
 { Evaluates the Einstein summation convention on the operands. Very slow now.
   The initial implementation is heavily inspired from Kyle Hundman's attempt to
@@ -92,36 +95,31 @@ function Sum(M: TTensor; axis: byte): TTensor; inline; overload;
   welcome. }
 function Einsum(Subscripts: string; Pots: array of TTensor): TTensor;
 
-function Transpose2D(T: TTensor): TTensor;
-function Transpose(T: TTensor; dims: array of longint): TTensor;
-function Transpose(T: TTensor): TTensor;
-
  { TVariable math --------------------------------------------------------------}
  { forward mode }
 function Add(A, B: TVariable): TVariable;
-function Divide(A, B: TVariable): TVariable;
-function Subtract(A, B: TVariable): TVariable;
-function Multiply(A, B: TVariable): TVariable;
-function MultiplyC(A: TVariable; x: double): TVariable;
-function MatMul(A, B: TVariable): TVariable;
-
-function Negate(A: TVariable): TVariable;
 function Cosh(A: TVariable): TVariable;
+function Divide(A, B: TVariable): TVariable;
+function Exp(A: TVariable): TVariable;
 function LeakyReLU(A: TVariable; v: double): TVariable; overload;
 function Log(A: TVariable): TVariable;
-function Sigmoid(A: TVariable): TVariable;
-function Sinh(A: TVariable): TVariable;
-function Sqr(A: TVariable): TVariable;
-function Sqrt(A: TVariable): TVariable;
-function ReLU(A: TVariable): TVariable;
-function Tanh(A: TVariable): TVariable;
-function Exp(A: TVariable): TVariable;
 function Max(A: TVariable): TVariable;
 function Max(A: TVariable; axis: byte): TVariable; overload;
 function Mean(A: TVariable; axis: byte): TVariable;
 function Mean(A: TVariable): TVariable; overload;
+function Multiply(A, B: TVariable): TVariable;
+function MultiplyC(A: TVariable; x: double): TVariable;
+function MatMul(A, B: TVariable): TVariable;
+function Negate(A: TVariable): TVariable;
+function ReLU(A: TVariable): TVariable;
+function Sigmoid(A: TVariable): TVariable;
+function Sinh(A: TVariable): TVariable;
+function Sqr(A: TVariable): TVariable;
+function Sqrt(A: TVariable): TVariable;
+function Subtract(A, B: TVariable): TVariable;
 function Sum(A: TVariable; axis: byte): TVariable;
 function Sum(A: TVariable): TVariable; overload;
+function Tanh(A: TVariable): TVariable;
 
 { backward mode }
 procedure BackwardAdd(arr: TVariableArr; ADy: TTensor);
@@ -130,7 +128,6 @@ procedure BackwardSubtract(arr: TVariableArr; ADy: TTensor);
 procedure BackwardMultiply(arr: TVariableArr; ADy: TTensor);
 procedure BackwardMultiplyC(arr: TVariableArr; ADy: TTensor);
 procedure BackwardMatmul(arr: TVariableArr; ADy: TTensor);
-
 procedure BackwardCosh(arr: TVariableArr; ADy: TTensor);
 procedure BackwardLeakyReLU(arr: TVariableArr; ADy: TTensor);
 procedure BackwardLn(arr: TVariableArr; ADy: TTensor);
@@ -179,10 +176,10 @@ begin
   Result := ApplyBfunc(A, B, @AddF);
 end;
 
-function Convolve2D(A, w: TTensor): TTensor;
-begin
-  raise ENotImplemented.Create('Not implemented');
-end;
+//function Convolve2D(A, w: TTensor): TTensor;
+//begin
+//  raise ENotImplemented.Create('Not implemented');
+//end;
 
 function Subtract(A, B: TTensor): TTensor;
 begin
@@ -213,7 +210,6 @@ end;
 
 function ArgMax(M: TTensor): TTensor;
 begin
-  Result := TTensor.Create;
   SetLength(Result.Val, 1);
   Result.Val[0] := ArgMax(M.Val);
   Result.ReshapeInplace([1]);
@@ -225,7 +221,6 @@ var
 begin
   Assert(Length(M.Shape) = 2, MSG_ASSERTION_RANK_2_TENSORS_ONLY);
   Assert(axis in [0, 1], MSG_ASSERTION_INVALID_AXIS);
-  Result := TTensor.Create;
   if axis = 0 then
   begin
     SetLength(Result.Val, M.Shape[1]);
@@ -242,9 +237,15 @@ begin
   end;
 end;
 
+function Min(M: TTensor): TTensor;
+begin
+  SetLength(Result.Val, 1);
+  Result.Val[0] := MinValue(M.Val);
+  Result.ReshapeInplace([1]);
+end;
+
 function Max(M: TTensor): TTensor;
 begin
-  Result := TTensor.Create;
   SetLength(Result.Val, 1);
   Result.Val[0] := MaxValue(M.Val);
   Result.ReshapeInplace([1]);
@@ -256,7 +257,6 @@ var
 begin
   Assert(Length(M.Shape) = 2, MSG_ASSERTION_RANK_2_TENSORS_ONLY);
   Assert(axis in [0, 1], MSG_ASSERTION_INVALID_AXIS);
-  Result := TTensor.Create;
   if axis = 0 then
   begin
     SetLength(Result.Val, M.Shape[1]);
@@ -289,13 +289,13 @@ begin
   Assert(axis <= 1, MSG_ASSERTION_INVALID_AXIS);
   if axis = 0 then
   begin
-    if noe.NoeConfig.useBLAS then
+    if IsBlasfuncAvailable(blas_dgemm) then
       Result := MeanCol_BLAS(M)
     else
       Result := MeanCol_Native(M);
   end
   else
-  if noe.NoeConfig.useBLAS then
+  if IsBlasfuncAvailable(blas_dgemm) then
     Result := MeanRow_BLAS(M)
   else
     Result := MeanRow_Native(M);
@@ -326,13 +326,13 @@ begin
   Assert(axis <= 1, MSG_ASSERTION_INVALID_AXIS);
   if axis = 0 then
   begin
-    if noe.NoeConfig.useBLAS then
+    if IsBlasfuncAvailable(blas_daxpy) then
       Result := SumCol_BLAS(M)
     else
       Result := SumCol_Native(M);
   end
   else
-  if noe.NoeConfig.useBLAS then
+  if IsBlasfuncAvailable(blas_daxpy) then
     Result := SumRow_BLAS(M)
   else
     Result := SumRow_Native(M);
@@ -372,12 +372,35 @@ begin
   Result := ApplyUfunc(A, @Ln_F);
 end;
 
+function Transpose(T: TTensor; dims: array of longint): TTensor;
+begin
+  Assert(Length(dims) = length(T.Shape),
+    'dims length does not match tensor dimension');
+  Result := TransposeTensor(T, dims);
+end;
+
+function Transpose(T: TTensor): TTensor;
+var
+  OutDims: TIntVector;
+  i: longint;
+begin
+  // attempt with 2d transpose first
+  if (Length(T.Shape) = 2) then
+    Result := Transpose2D(T)
+  else
+  begin
+    SetLength(OutDims, T.NDims);
+    for i := 0 to T.NDims - 1 do
+      OutDims[i] := T.NDims - i - 1;
+    Result := TransposeTensor(T, OutDims);
+  end;
+end;
+
 function Transpose2D(T: TTensor): TTensor;
 var
   i, j: longint;
 begin
   Assert(Length(T.Shape) = 2, 'Transpose2D only accepts rank-2 tensors');
-  Result := TTensor.Create;
   Result.ReshapeInplace([T.Shape[1], T.Shape[0]]);
   SetLength(Result.Val, Length(T.Val));
   for i := 0 to T.Shape[0] - 1 do
@@ -385,35 +408,41 @@ begin
       Result.Val[j * T.Shape[0] + i] := T.Val[i * T.Shape[1] + j];
 end;
 
-function Transpose(T: TTensor; dims: array of longint): TTensor;
-var
-  resultedIdx, dimsLetter: string;
-  i: longint;
+procedure cbTranspose(val: double; offset: longint; idx: TIntVector;
+  currDim: longint; var T, OutT: TTensor);
 begin
-  dimsLetter := DimsToLetter(dims);
-  Assert(Length(dims) = length(T.Shape),
-    'dims length does not match tensor dimension');
-  resultedIdx := DimsToLetter(dims);
-  for i := 0 to Length(dims) - 1 do
-    resultedIdx[i + 1] := dimsLetter.Chars[dims[i]];
-  Result := Einsum(dimsLetter + '->' + resultedIdx, [T]);
+  OutT.Val[offset] := val;
 end;
 
-function Transpose(T: TTensor): TTensor;
+function TransposeTensor(X: TTensor; axis: array of longint): TTensor;
+var
+  outStrides, OutShape: TIntVector;
+  i: integer;
 begin
-  // attempt with 2d transpose first
-  if (Length(T.Shape) = 2) then
-    Result := Transpose2D(T)
-  else
-    Result := Einsum(DimsToLetter(T.Shape) + '->' +
-      ReverseString(DimsToLetter(T.Shape)), [T]);
+  SetLength(OutShape, Length(axis));
+  SetLength(OutStrides, Length(axis));
+  SetLength(Result.Val, X.Size);
+
+  for i := 0 to Length(axis) - 1 do
+  begin
+    OutShape[i]   := X.Shape[axis[i]];
+    OutStrides[i] := X.Strides[axis[i]];
+  end;
+
+  X.ReshapeInplace(OutShape);
+  X.Strides := outStrides;
+
+  { Fill Result.Val with strided X.Val }
+  IterateTensor(X, Result, @cbTranspose);
+
+  Result.ReshapeInplace(OutShape);
+  Result.Strides := outStrides;
 end;
 
 function ReLU(T: TTensor): TTensor;
 var
   i: longint;
 begin
-  Result := TTensor.Create;
   Result.ReshapeInplace(T.Shape);
   SetLength(Result.Val, Length(T.Val));
   for i := 0 to Length(Result.Val) - 1 do
@@ -490,40 +519,64 @@ begin
   Result := ApplyUfunc(A, @Exp_F);
 end;
 
+procedure CreateOrUpdateOpNode(var res: TVariable; ResultName: string;
+  inputs: array of TVariable; Data: TTensor; BackwardFunc: TBackwardFunc);
+var
+  TrackingID: string;
+  i, TrackedNodeIdx: longint;
+begin
+  TrackingID := ResultName + ';';
+  for i := 0 to Length(inputs) - 1 do
+  begin
+    TrackingID := TrackingID + IntToStr(inputs[i].ID);
+    if i < Length(inputs) - 1 then
+      TrackingID := TrackingID + ';';
+  end;
+  TrackedNodeIdx := GlobalNodeTracker.FindByTrackingID(TrackingID);
+
+  if TrackedNodeIdx > -1 then
+  begin
+    Res      := GlobalNodeTracker.Items[TrackedNodeIdx];
+    Res.Data := Data;
+  end
+  else
+  begin
+    Res := TVariable.Create(Data, ResultName, BackwardFunc);
+    Res.TrackingID := TrackingID;
+    Res.AddPrev(inputs);
+
+    { track the non-leaf nodes }
+    GlobalNodeTracker.Add(Res);
+  end;
+end;
+
 function Add(A, B: TVariable): TVariable;
 begin
-  Result := TVariable.Create(A.Data + B.Data, 'ForwardAdd', @BackwardAdd);
-  Result.RequiresGrad := True;
-  Result.AddPrev([A, B]);
+  CreateOrUpdateOpNode(Result, 'ForwardAdd', [A, B], (A.Data + B.Data), @BackwardAdd);
 end;
 
 function Divide(A, B: TVariable): TVariable;
 begin
-  Result := TVariable.Create(A.Data / B.Data, 'ForwardDivide', @BackwardDivide);
-  Result.RequiresGrad := True;
-  Result.AddPrev([A, B]);
+  CreateOrUpdateOpNode(Result, 'ForwardDivide', [A, B], (A.Data / B.Data),
+    @BackwardDivide);
 end;
 
 function Subtract(A, B: TVariable): TVariable;
 begin
-  Result := TVariable.Create(A.Data - B.Data, 'ForwardSubtract', @BackwardSubtract);
-  Result.RequiresGrad := True;
-  Result.AddPrev([A, B]);
+  CreateOrUpdateOpNode(Result, 'ForwardSubtract', [A, B], (A.Data - B.Data),
+    @BackwardSubtract);
 end;
 
 function Multiply(A, B: TVariable): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.Multiply(A.Data, B.Data),
-    'ForwardMultiply', @BackwardMultiply);
-  Result.RequiresGrad := True;
-  Result.AddPrev([A, B]);
+  CreateOrUpdateOpNode(Result, 'ForwardMultiply', [A, B], (A.Data * B.Data),
+    @BackwardMultiply);
 end;
 
 function MultiplyC(A: TVariable; x: double): TVariable;
 begin
   Result := TVariable.Create(noe.Math.Multiply(A.Data, x), 'ForwardMultiplyC',
     @BackwardMultiplyC);
-  Result.RequiresGrad := True;
 
   SetLength(Result.Prev, 2);
   Result.Prev[0] := A;
@@ -534,102 +587,71 @@ end;
 function MatMul(A, B: TVariable): TVariable;
 begin
   Assert(A.Shape[1] = B.Shape[0], MSG_ASSERTION_DIM_MISMATCH);
-  Result := TVariable.Create(noe.Math.MatMul(A.Data, B.Data),
-    'ForwardMatMul', @BackwardMatmul);
-  Result.RequiresGrad := True;
-  Result.AddPrev([A, B]);
+
+  CreateOrUpdateOpNode(Result, 'ForwardMatMul', [A, B], MatMul(A.Data, B.Data),
+    @BackwardMatmul);
+
 end;
 
 function Negate(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(-A.Data, 'ForwardNegate', @BackwardNegate);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardNegate', [A], -A.Data, @BackwardNegate);
 end;
 
 function Cosh(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(Cosh(A.Data), 'ForwardCosh', @BackwardCosh);
-  Result.RequiresGrad := True;
-
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardCosh', [A], Cosh(A.Data), @BackwardCosh);
 end;
 
 function LeakyReLU(A: TVariable; v: double): TVariable;
 begin
-  Result := TVariable.Create(LeakyReLU(A.Data, v), 'ForwardLeakyReLU',
+  CreateOrUpdateOpNode(Result, 'ForwardLeakyReLU', [A, v], LeakyReLU(A.Data, v),
     @BackwardLeakyReLU);
-  Result.RequiresGrad := True;
-
-  Result.AddPrev(A);
-  Result.AddPrev(v);
 end;
 
 function Log(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(Log(A.Data), 'ForwardLn', @BackwardLn);
-  Result.RequiresGrad := True;
-
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardLog', [A], Log(A.Data), @BackwardLn);
 end;
 
 function Sigmoid(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(Sigmoid(A.Data), 'ForwardSigmoid', @BackwardSigmoid);
-  Result.RequiresGrad := True;
-
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardSigmoid', [A], Sigmoid(A.Data), @BackwardSigmoid);
 end;
 
 function Sinh(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.Sinh(A.Data), 'ForwardSinh', @BackwardSinh);
-  Result.RequiresGrad := True;
-
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardSinh', [A], Sinh(A.Data), @BackwardSinh);
 end;
 
 function Sqr(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(A.Data ** 2, 'ForwardSqr', @BackwardSqr);
-  Result.RequiresGrad := True;
-
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardSqr', [A], (A.Data ** 2), @BackwardSqr);
 end;
 
 function Sqrt(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(A.Data ** 0.5, 'ForwardSqrt', @BackwardSqrt);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardSqrt', [A], (A.Data ** 0.5), @BackwardSqrt);
 end;
 
 function ReLU(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.ReLU(A.Data), 'ForwardReLU', @BackwardReLU);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardReLU', [A], ReLU(A.Data), @BackwardReLU);
 end;
 
 function Tanh(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.Tanh(A.Data), 'ForwardTanh', @BackwardTanh);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardTanh', [A], Tanh(A.Data), @BackwardTanh);
 end;
 
 function Exp(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.Exp(A.Data), 'ForwardExp', @BackwardExp);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardExp', [A], Exp(A.Data), @BackwardExp);
 end;
 
 function Max(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(Max(A.Data), 'ForwardMax', @BackwardMax);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardMax', [A], Max(A.Data), @BackwardMax);
 end;
 
 function Max(A: TVariable; axis: byte): TVariable;
@@ -640,39 +662,32 @@ end;
 
 function Mean(A: TVariable; axis: byte): TVariable;
 begin
-  Result := TVariable.Create(Mean(A.Data, axis), 'ForwardMean', @BackwardMean);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardMean', [A, axis], Mean(A.Data, axis),
+    @BackwardMean);
 end;
 
 function Mean(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.Mean(A.Data), 'ForwardMean', @BackwardMean);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardMean', [A], Mean(A.Data), @BackwardMean);
 end;
 
 function Sum(A: TVariable; axis: byte): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.sum(A.Data, axis), 'ForwardSum', @BackwardSum);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardSum', [A, axis], Sum(A.Data, axis), @BackwardSum);
 end;
 
 function Sum(A: TVariable): TVariable;
 begin
-  Result := TVariable.Create(noe.Math.sum(A.Data), 'ForwardSum', @BackwardSum);
-  Result.RequiresGrad := True;
-  Result.AddPrev(A);
+  CreateOrUpdateOpNode(Result, 'ForwardSum', [A], Sum(A.Data), @BackwardSum);
 end;
 
 function SoftMax(A: TVariable; axis: byte): TVariable;
 var
   X, Y: TVariable;
 begin
-  X      := A - Max(A, axis);
-  Y      := Exp(X);
-  Result := Y / sum(Y, axis);
+  //X      := ;
+  //Y      := ;
+  Result := Exp((A - Max(A, axis))) / sum(Exp((A - Max(A, axis))), axis);
 end;
 
 function ReduceTo(Target, Other: TTensor): TTensor;
@@ -932,8 +947,9 @@ begin
       Assert(Pots[0].Shape[0] = Pots[0].Shape[1], 'Cannot collapse index ' +
         re.Match[0].Chars[0]);
 
-      Result := TTensor.Create;
-      len    := Pots[0].Shape[0];
+      len := Pots[0].Shape[0];
+
+
       SetLength(Result.Val, len);
       Result.ReshapeInplace([len]);
       for i := 0 to len - 1 do
@@ -1047,7 +1063,6 @@ function ApplyUfunc(A: TTensor; Func: TUFunc): TTensor;
 var
   i: longint;
 begin
-  Result := TTensor.Create;
   Result.ReshapeInplace(A.Shape);
   SetLength(Result.val, Length(A.val));
   for i := 0 to length(A.val) - 1 do
@@ -1070,7 +1085,6 @@ begin
       exit(Add_BLAS(A, B));
 
     { ---------- Otherwise, go vanilla ---------- }
-    Result := TTensor.Create;
     Result.ReshapeInplace(A.Shape);
     SetLength(Result.Val, Length(A.Val));
     for i := 0 to Length(A.Val) - 1 do
@@ -1084,7 +1098,10 @@ begin
     { If either one is a scalar, i.e., A.Size=1 or B.Size=1 }
     if (B.Size = 1) then
     begin
-      Result := CreateTensor(A.Shape);
+      //Writeln('tensor-scalar broadcasting');
+      Result := CreateEmptyTensor(A.Shape);
+      //SetLength(Result.Val, ShapeToSize(A.Shape));
+      //Result.ReshapeInplace(A.Shape);
       for i := 0 to Length(A.Val) - 1 do
         Result.Val[i] := Func(A.Val[i], B.Val[0]);
       exit;
@@ -1092,7 +1109,10 @@ begin
 
     if (A.Size = 1) then
     begin
-      Result := CreateTensor(B.Shape);
+      //Writeln('scalar-tensor broadcasting');
+      Result := CreateEmptyTensor(B.Shape);
+      //SetLength(Result.Val, ShapeToSize(B.Shape));
+      //Result.ReshapeInplace(B.Shape);
       for i := 0 to Length(B.Val) - 1 do
         Result.Val[i] := Func(A.Val[0], B.Val[i]);
       exit;
@@ -1134,7 +1154,6 @@ begin
       { Otherwise, perform general broadcasting with any dimension }
       br := Broadcast(A, B);
 
-      Result := TTensor.Create;
       Result.ReshapeInplace(br.broadcastShape);
       SetLength(Result.Val, ShapeToSize(br.broadcastShape));
 
@@ -1147,7 +1166,7 @@ end;
 
 function IsBlasfuncAvailable(Func: Pointer): boolean;
 begin
-  Result := NoeConfig.useBLAS and (Func <> nil);
+  Result := (NoeConfig.useBLAS) and (Func <> nil);
 end;
 
 

@@ -146,8 +146,6 @@ end;
 
 procedure VisualizeMatrix(T: TTensor);
 var
-  s: string = '';
-  c: char;
   i, j: integer;
   maxval: double;
 begin
@@ -250,7 +248,6 @@ begin
   Assert(T.NDims = 2, MSG_ASSERTION_RANK_2_TENSORS_ONLY);
   Indices := Squeeze(ArgMax(T, 1));
 
-  Result := TTensor.Create;
   Result.ReshapeInplace([Indices.Size]);
   SetLength(Result.Val, Indices.Size);
   for i := 0 to Indices.Size - 1 do
