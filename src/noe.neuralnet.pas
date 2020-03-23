@@ -13,7 +13,7 @@ unit noe.neuralnet;
 interface
 
 uses
-  Classes, fgl, math, noe, noe.Math, noe.utils, SysUtils;
+  Classes, fgl, fpjson, jsonparser, Math, noe, noe.Math, SysUtils;
 
 type
   TLayer = class;
@@ -23,8 +23,10 @@ type
   TLayerList    = specialize TFPGList<TLayer>;
 
   TBatchNormLayer = class;
+  TConv2dLayer    = class;
   TDenseLayer     = class;
   TDropoutLayer   = class;
+  TFlattenLayer   = class;
   TLeakyReLULayer = class;
   TReLULayer      = class;
   TSigmoidLayer   = class;
@@ -39,6 +41,7 @@ type
   public
     function Eval(X: TVariable): TVariable; virtual; abstract;
     function GetParams: TVariableArr;
+    procedure Cleanup;
   end;
 
   { TBatchNormLayer }
@@ -53,6 +56,14 @@ type
     property Beta: TVariable read FBeta write FBeta;
   end;
 
+  { TConv2dLayer }
+
+  TConv2dLayer = class(TLayer)
+    constructor Create(InChannels, OutChannels, KernelSize: longint;
+      Strides: longint = 1; Padding: longint = 0);
+    function Eval(X: TVariable): TVariable; override;
+  end;
+
   { TDenseLayer, or fully-connected layer }
 
   TDenseLayer = class(TLayer)
@@ -65,25 +76,32 @@ type
 
   TDropoutLayer = class(TLayer)
   private
-    FDropoutRate: double;
+    FDropoutRate: float;
     FUseDropout:  boolean;
     function GetUseDropout: boolean;
   public
-    constructor Create(ADropoutRate: double);
+    constructor Create(ADropoutRate: float);
     function Eval(X: TVariable): TVariable; override;
-    property DropoutRate: double read FDropoutRate write FDropoutRate;
+    property DropoutRate: float read FDropoutRate write FDropoutRate;
     property UseDropout: boolean read GetUseDropout write FUseDropout;
+  end;
+
+  { TFlattenLayer }
+
+  TFlattenLayer = class(TLayer)
+  public
+    function Eval(X: TVariable): TVariable; override;
   end;
 
   { TLeakyReLULayer }
 
   TLeakyReLULayer = class(TLayer)
   private
-    FAlpha: double;
+    FAlpha: float;
   public
-    constructor Create(AAlpha: double);
+    constructor Create(AAlpha: float);
     function Eval(X: TVariable): TVariable; override;
-    property Alpha: double read FAlpha write FAlpha;
+    property Alpha: float read FAlpha write FAlpha;
   end;
 
   { TReLULayer }
@@ -108,6 +126,7 @@ type
   public
     constructor Create(AAxis: longint);
     function Eval(X: TVariable): TVariable; override;
+    property Axis: longint read FAxis write FAxis;
   end;
 
   { TTanhLayer }
@@ -127,6 +146,8 @@ type
     constructor Create(Layers: array of TLayer); overload;
     function Eval(X: TVariable): TVariable;
     procedure AddLayer(Layer: TLayer);
+    procedure AddParam(param: TVariable);
+    procedure Cleanup;
   end;
 
   TBatchingResult = record
@@ -135,17 +156,16 @@ type
   end;
 
 { Loss functions }
-function AccuracyScore(predicted, actual: TTensor): double;
+function AccuracyScore(predicted, actual: TTensor): float;
 function BinaryCrossEntropyLoss(ypred, ytrue: TVariable): TVariable;
 function CrossEntropyLoss(ypred, ytrue: TVariable): TVariable;
-function L2Regularization(Model: TModel; Lambda: double = 0.001): TVariable;
+function L2Regularization(Model: TModel; Lambda: float = 0.001): TVariable;
 
 { Utilities }
 function CreateBatch(X: TTensor; BatchSize: integer): TTensorArr;
 function CreateBatch(X, y: TTensor; BatchSize: integer): TBatchingResult;
-function Im2Col(img: TTensor;
-  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
-  StrideHeight, StrideWidth: longint): TTensor;
+function LoadModel(filename: string): TModel;
+procedure SaveModel(Model: TModel; filename: string);
 
 
 implementation
@@ -163,10 +183,10 @@ end;
 function CrossEntropyLoss(ypred, ytrue: TVariable): TVariable;
 begin
   Assert(ypred.Size = ytrue.Size, MSG_ASSERTION_DIFFERENT_LENGTH);
-  Result := -Sum(ytrue * Log(ypred)) / ypred.Shape[0];
+  Result := -Mean(ytrue * Log(ypred));
 end;
 
-function L2Regularization(Model: TModel; Lambda: double): TVariable;
+function L2Regularization(Model: TModel; Lambda: float): TVariable;
 var
   param: TVariable;
 begin
@@ -177,42 +197,22 @@ begin
   Result     := Lambda * Result;
 end;
 
-function Im2ColGetPixel(img: TTensor;
-  Height, Width, channels, row, col, channel, padH, padW: longint): double;
-var
-  r, c: longint;
-begin
-  r := row - padH;
-  c := col - padW;
-
-  if ((r < 0) or (c < 0) or (r >= Height) or (c >= Width)) then
-    Exit(0);
-  Exit(img.Val[c + Width * (r + Height * channel)]);
-end;
 
 function CreateBatch(X: TTensor; BatchSize: integer): TTensorArr;
 var
   i, OutSize: longint;
-  isSet: boolean = False;
-  prevID: longint;
 begin
   OutSize := ceil(X.Shape[0] / BatchSize);
   SetLength(Result, OutSize);
   for i := 0 to OutSize - 1 do
     Result[i] := GetRowRange(X, i * BatchSize,
-      Math.min(BatchSize, X.Shape[0] - i * BatchSize));//if not isSet then
-  //begin
-  //  prevID := Result[i].ID;
-  //  isSet  := True;
-  //end;
+      Math.min(BatchSize, X.Shape[0] - i * BatchSize));
 
 end;
 
 function CreateBatch(X, y: TTensor; BatchSize: integer): TBatchingResult;
 var
   i, OutSize: longint;
-  isSet: boolean = False;
-  prevID: longint;
 begin
   Assert(X.Shape[0] = y.Shape[0], 'X and y have different height');
   OutSize := ceil(X.Shape[0] / BatchSize);
@@ -231,44 +231,157 @@ begin
 
 end;
 
-
-function Im2Col(img: TTensor;
-  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
-  StrideHeight, StrideWidth: longint): TTensor;
+function JSONArrayToFloatVector(arr: TJSONArray): TFloatVector;
 var
-  ConvOutHeight, ConvOutWidth: longint;
-  ChannelsCol, c, h, w, wOffset, hOffset, cIm: longint;
-  ImRow, ImCol, colIdx: longint;
+  i: longint;
 begin
-  ConvOutHeight := (Height + 2 * PaddingHeight - FilterH) div StrideHeight + 1;
-  ConvOutWidth  := (Width + 2 * PaddingWidth - FilterW) div StrideWidth + 1;
-  ChannelsCol   := Channels * FilterH * FilterW;
-
-  SetLength(Result.Val, Channels * FilterH * FilterW * ConvOutHeight * ConvOutWidth);
-  Result.ReshapeInplace([Channels * FilterH * FilterW, ConvOutHeight * ConvOutWidth]);
-  for c := 0 to ChannelsCol - 1 do
-  begin
-    wOffset := c mod FilterW;
-    hOffset := (c div FilterW) mod FilterH;
-    cIm     := c div FilterH div FilterW;
-    for h := 0 to ConvOutHeight - 1 do
-      for w := 0 to ConvOutWidth - 1 do
-      begin
-        ImRow  := hOffset + h * StrideHeight;
-        ImCol  := wOffset + w * StrideWidth;
-        colIdx := (c * ConvOutHeight + h) * ConvOutWidth + w;
-
-        Result.Val[colIdx] := Im2ColGetPixel(img, Height, Width,
-          Channels, ImRow, ImCol, cIm, PaddingHeight, PaddingWidth);
-      end;
-  end;
-
+  SetLength(Result, arr.Count);
+  for i := 0 to arr.Count - 1 do
+    Result[i] := arr[i].AsFloat;
 end;
 
-function AccuracyScore(predicted, actual: TTensor): double;
+function FloatVectorToJSONArray(arr: array of NFloat): TJSONArray;
+var
+  i: longint;
+begin
+  Result := TJSONArray.Create;
+  for i := 0 to high(arr) do
+    Result.Add(arr[i]);
+end;
+
+function IntVectorToJSONArray(arr: array of longint): TJSONArray;
+var
+  i: longint;
+begin
+  Result := TJSONArray.Create;
+  for i := 0 to high(arr) do
+    Result.Add(arr[i]);
+end;
+
+function LoadModel(filename: string): TModel;
+var
+  JData: TJSONData;
+  o: TJSONEnum;
+  LayerName: string;
+  layer: TLayer;
+  sl: TStringList;
+  DenseIn, DenseOut: longint;
+begin
+  Result := TModel.Create;
+
+  sl := TStringList.Create;
+  sl.LoadFromFile(filename);
+
+  JData := GetJSON(sl.Text);
+  for o in TJSONArray(JData) do
+  begin
+    LayerName := o.Value.FindPath('layer_name').AsString;
+
+    case LayerName of
+      'Dense':
+      begin
+        DenseIn  := TJSONArray(o.Value.FindPath('layer_data.weight_shape')).Items[0].AsInteger;
+        DenseOut := TJSONArray(o.Value.FindPath('layer_data.weight_shape')).Items[1].AsInteger;
+        layer    := TDenseLayer.Create(DenseIn, DenseOut);
+
+        layer.Params[0] :=
+          CreateTensor([DenseIn, DenseOut], JSONArrayToFloatVector(
+          TJSONArray(o.Value.FindPath('layer_data.weight_val')))).ToVariable(True);
+        layer.Params[1] :=
+          CreateTensor(layer.Params[1].Shape, JSONArrayToFloatVector(
+          TJSONArray(o.Value.FindPath('layer_data.bias_val')))).ToVariable(True);
+        Result.AddLayer(layer);
+      end;
+      'Dropout':
+      begin
+        layer := TDropoutLayer.Create(
+          o.Value.FindPath('layer_data.DropoutRate').AsFloat);
+        Result.AddLayer(layer);
+      end;
+      'LeakyReLU':
+      begin
+        layer := TLeakyReLULayer.Create(
+          o.Value.FindPath('layer_data.leakiness').AsFloat);
+        Result.AddLayer(layer);
+      end;
+      'ReLU':
+      begin
+        layer := TReLULayer.Create;
+        Result.AddLayer(layer);
+      end;
+      'SoftMax':
+      begin
+        layer := TSoftMaxLayer.Create(
+          o.Value.FindPath('layer_data.axis').AsInteger);
+        Result.AddLayer(layer);
+      end;
+    end;
+  end;
+
+  sl.Free;
+end;
+
+procedure SaveModel(Model: TModel; filename: string);
+var
+  layer: TLayer;
+  o, LayerData: TJSONObject;
+  LayersJSONArr: TJSONArray;
+  a: array[0..1] of integer;
+  sl: TStringList;
+begin
+  LayersJSONArr := TJSONArray.Create;
+
+  for layer in Model.LayerList do
+  begin
+    if layer is TDenseLayer then
+    begin
+      LayerData := TJSONObject.Create(
+        ['weight_val', FloatVectorToJSONArray(layer.Params[0].Data.val),
+        'weight_shape', IntVectorToJSONArray(layer.Params[0].Data.Shape),
+        'bias_val', FloatVectorToJSONArray(layer.Params[1].Data.Val),
+        'bias_shape', IntVectorToJSONArray(layer.Params[1].Data.Shape)]);
+      LayersJSONArr.Add(TJSONObject.Create(['layer_name', 'Dense',
+        'layer_data', LayerData]));
+    end;
+
+    if layer is TDropoutLayer then
+    begin
+      LayerData := TJSONObject.Create(['DropoutRate', TDropoutLayer(layer).DropoutRate]);
+      LayersJSONArr.Add(TJSONObject.Create(['layer_name', 'Dropout',
+        'layer_data', LayerData]));
+    end;
+
+    if layer is TLeakyReLULayer then
+    begin
+      LayerData := TJSONObject.Create(['leakiness', TLeakyReLULayer(layer).Alpha]);
+      LayersJSONArr.Add(TJSONObject.Create(['layer_name', 'LeakyReLU',
+        'layer_data', LayerData]));
+    end;
+
+    if layer is TReLULayer then
+      LayersJSONArr.Add(TJSONObject.Create(['layer_name', 'ReLU']));
+
+    if layer is TSoftMaxLayer then
+    begin
+      LayerData := TJSONObject.Create(['axis',
+        TSoftMaxLayer(layer).Axis]);
+      LayersJSONArr.Add(TJSONObject.Create(['layer_name', 'SoftMax',
+        'layer_data', LayerData]));
+    end;
+  end;
+
+  sl      := TStringList.Create;
+  sl.Text := LayersJSONArr.AsJSON;
+  sl.SaveToFile(filename);
+
+  sl.Free;
+  LayersJSONArr.Free;
+end;
+
+function AccuracyScore(predicted, actual: TTensor): float;
 var
   i: integer;
-  tot: double;
+  tot: float;
 begin
   tot := 0;
   for i := 0 to predicted.Size - 1 do
@@ -276,6 +389,45 @@ begin
     if predicted.GetAt(i) = actual.GetAt(i) then
       tot := tot + 1;
   Result  := tot / predicted.Size;
+end;
+
+{ TFlattenLayer }
+
+function TFlattenLayer.Eval(X: TVariable): TVariable;
+var
+  i, sz: longint;
+begin
+  sz := 1;
+  for i := 1 to X.NDims - 1 do
+    sz   := sz * X.Shape[i];
+  Result := Reshape(X, [X.Shape[0], sz]);
+end;
+
+{ TConv2dLayer }
+
+constructor TConv2dLayer.Create(InChannels, OutChannels, KernelSize: longint;
+  Strides: longint; Padding: longint);
+var
+  W, b: TVariable;
+begin
+  inherited Create;
+  { Xavier weight initialization }
+  W := RandomTensorNormal([OutChannels, InChannels, KernelSize, KernelSize]) *
+    ((2 / (InChannels * KernelSize * KernelSize)) ** 0.5);
+  b := CreateTensor([1, OutChannels, 1, 1], 0);
+
+  b.Name := 'Bias' + IntToStr(b.ID);
+  SetRequiresGrad([W, b], True);
+
+  SetLength(self.Params, 2);
+  self.Params[0] := W;
+  self.Params[1] := b;
+end;
+
+function TConv2dLayer.Eval(X: TVariable): TVariable;
+begin
+  //PrintTensor(Conv2D(self.Params[0], self.Params[1], 0, 0, 1, 1));
+  Result := Conv2D(X, self.Params[0], 0, 0, 1, 1) + self.Params[1];
 end;
 
 { TBatchNormLayer }
@@ -317,7 +469,7 @@ end;
 
 { TLeakyReLULayer }
 
-constructor TLeakyReLULayer.Create(AAlpha: double);
+constructor TLeakyReLULayer.Create(AAlpha: float);
 begin
   self.Alpha := AAlpha;
 end;
@@ -344,7 +496,7 @@ begin
     Result := self.FUseDropout;
 end;
 
-constructor TDropoutLayer.Create(ADropoutRate: double);
+constructor TDropoutLayer.Create(ADropoutRate: float);
 begin
   self.DropoutRate := ADropoutRate;
   self.UseDropout  := True;
@@ -435,10 +587,27 @@ var
 begin
   self.LayerList.Add(Layer);
   for Param in Layer.Params do
+    self.AddParam(param);
+end;
+
+procedure TModel.AddParam(param: TVariable);
+begin
+  SetLength(self.Params, Length(self.Params) + 1);
+  self.Params[Length(self.Params) - 1] := param;
+end;
+
+procedure TModel.Cleanup;
+var
+  l: TLayer;
+begin
+  Params := nil;
+  for l in LayerList do
   begin
-    SetLength(self.Params, Length(self.Params) + 1);
-    self.Params[Length(self.Params) - 1] := Param;
+    l.Cleanup;
+    l.Free;
   end;
+  FreeAndNil(LayerList);
+  FreeAndNil(self);
 end;
 
 { TLayer }
@@ -446,6 +615,11 @@ end;
 function TLayer.GetParams: TVariableArr;
 begin
   Result := self.Params;
+end;
+
+procedure TLayer.Cleanup;
+begin
+  Params := nil;
 end;
 
 end.

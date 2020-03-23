@@ -16,10 +16,10 @@ uses
   Classes, Math, strutils, SysUtils, fgl;
 
 type
-  TIntVector   = array of longint;
-  TFloatVector = array of double;
+  NFloat = double;
 
-  TTensorProxy = class;
+  TIntVector   = array of longint;
+  TFloatVector = array of NFloat;
   TVariable    = class;
 
   { TTensor }
@@ -60,35 +60,6 @@ type
   PTensor    = ^TTensor;
   TTensorArr = array of TTensor;
 
-  { A proxy of a tensor broadcasted to a specific dimension. The proxies are
-    created whenever a broadcasting is needed to prevent the creation of exact
-    copy of a tensor }
-
-  { TTensorProxy }
-
-  TTensorProxy = class
-    FRef:      TTensor;
-    { Adjusted reference dimension (prepending the dimension when needed) }
-    FRefShape: TIntVector;
-    FIndices:  TIntVector;
-    FTargetShape: TIntVector;
-  public
-    constructor Create(var ref: TTensor; targetShape: TIntVector);
-
-    { Get the value pointing to FRef at the (mapped) offset.
-      TODO in the future, precompute the mapping in the constructor. Or not? }
-    function GetValByOffset(offset: longint): double;
-    function MapOffset(offset: longint): longint;
-    procedure GenerateIndex;
-    property Val[i: longint]: double read GetValByOffset;
-  end;
-
-  TBroadcastResult = record
-    A: TTensorProxy;
-    B: TTensorProxy;
-    broadcastShape: TIntVector;
-  end;
-
   TConfig = record
     debug:   boolean;
     useBLAS: boolean;
@@ -96,7 +67,7 @@ type
     BLASFileName: string;
   end;
 
-  TCallback = procedure(val: float; offset:longint; idx: TIntVector; currDim: longint; var T, OutT: TTensor);
+  TCallback = procedure(val: NFloat; offset:longint; idx: TIntVector; currDim: longint; var T, OutT: TTensor);
 
   { The wrapper of TTensor that also acts as a single node in a computaional graph }
   PVariable = ^TVariable;
@@ -132,6 +103,7 @@ type
       ABackwardFunc: TBackwardFunc); overload;
     constructor Create(ATensor: TTensor; AName: string;
       ABackwardFunc: TBackwardFunc; AIsLeaf: boolean); overload;
+    destructor Cleanup;
     procedure AddPrev(AVariable: TVariable);
     procedure AddPrev(arr: array of TVariable);
     procedure Backpropagate;
@@ -172,6 +144,8 @@ const
   MSG_ASSERTION_DIFFERENT_LENGTH = 'Two arrays have different length.';
   MSG_ASSERTION_RANK_2_TENSORS_ONLY = 'This function can be used only on rank-2 tensors';
   MSG_ASSERTION_RANK_1_TENSORS_ONLY = 'This function can be used only on rank-1 tensors';
+
+  EPS_TOL = 1e-5;
 
 var
   NoeConfig: TConfig;
@@ -230,10 +204,12 @@ function VFlip(T: TTensor): TTensor;
 
 { Broadcasting ----------------------------------------------------------------}
 
+function AsStrided(X: TTensor; TargetShape, Strides: array of longint): TTensor;
+function BroadcastTo(X: TTensor; TargetShape: array of longint): TTensor;
+
 { Check if two tensors are broadcasatable }
 function IsBroadcastable(A, B: TTensor): boolean;
 function GetBroadcastDims(A, B: TTensor): TIntVector;
-function Broadcast(A, B: TTensor): TBroadcastResult;
 
 { Tile column tensor A n times to the right }
 { HACK: it works, but certainly can be improved }
@@ -250,12 +226,12 @@ procedure IterateTensor(T, OutT: TTensor; Callback: TCallback);
 { Tensor creation ------------------------------------------------------------ }
 function CopyTensor(A: TTensor): TTensor;
 function CreateEmptyTensor(Shape: array of longint): TTensor;
-function CreateTensor(Shape: array of longint; Val: float): TTensor; overload;
-function CreateTensor(Shape: array of longint; Vals: array of float): TTensor; overload;
+function CreateTensor(Shape: array of longint; Val: NFloat): TTensor; overload;
+function CreateTensor(Shape: array of longint; Vals: array of NFloat): TTensor; overload;
 function Ones(Shape: array of longint): TTensor;
 function RandomTensorNormal(Shape: array of longint): TTensor;
 function RandomTensorBinomial(Shape: array of longint; p: double): TTensor;
-function ReadCSV(fileName: string): TTensor;
+function ReadCSV(fileName: string; NRowSkip: longint = 0): TTensor;
 function Zeros(Shape: array of longint): TTensor;
 
 
@@ -270,6 +246,9 @@ procedure BackwardGraph(const T: TVariable);
 procedure ClearIntermediaryNodes;
 procedure SetRequiresGrad(arr: array of TVariable; val: boolean);
 procedure ZeroGradGraph(const T: TVariable);
+
+{ Auxilaries ------------------------------------------------------------------}
+procedure Cleanup;
 
 implementation
 
@@ -489,11 +468,13 @@ begin
   begin
     w.FreeData;
     w.FreeGrad;
+    Finalize(w.FName);
     NodeSpace.Remove(w);
-
     // for now idk why cannot destroy :(
     //w.Destroy;
   end;
+
+  FreeAndNil(TobeRemoved);
 end;
 
 function TNodeTracker.FindByTrackingID(TrackingID: string): longint;
@@ -508,104 +489,30 @@ begin
   end;
 end;
 
-{ TTensorProxy }
-
-constructor TTensorProxy.Create(var ref: TTensor; targetShape: TIntVector);
-var
-  i, nExtraDim: longint;
-begin
-  FRef := ref;
-  FTargetShape := targetShape;
-
-  nExtraDim := Length(targetShape) - Length(ref.Shape);
-  SetLength(FRefShape, Length(ref.Shape) + nExtraDim);
-  for i := 0 to Length(FRefShape) - 1 do
-    FRefShape[i] := 1;
-  for i := 0 to length(ref.Shape) - 1 do
-    FRefShape[i] := ReverseIntArr(ref.Shape)[i];
-  FRefShape      := ReverseIntArr(FRefShape);
-end;
-
-function TTensorProxy.GetValByOffset(offset: longint): double;
-var
-  expectedIndex, mappedIndex: TIntVector;
-  i: longint;
-begin
-  //Writeln('TTensorProxy.GetValByOffset was called');
-  expectedIndex := OffsetToIndex(offset, FTargetShape);
-
-  SetLength(mappedIndex, Length(expectedIndex));
-
-  { map expected index to the proper index }
-  for i := 0 to Length(expectedIndex) - 1 do
-    if expectedIndex[i] > FRefShape[i] - 1 then
-      mappedIndex[i] := 0
-    else
-      mappedIndex[i] := expectedIndex[i];
-
-  Result := FRef.Val[IndexToOffset(mappedIndex, FRefShape)];
-end;
-
-function TTensorProxy.MapOffset(offset: longint): longint;
-var
-  expectedIndex, mappedIndex: TIntVector;
-  i: longint;
-begin
-  expectedIndex := OffsetToIndex(offset, FTargetShape);
-
-  SetLength(mappedIndex, Length(expectedIndex));
-
-  { map expected index to the proper index }
-  for i := 0 to Length(expectedIndex) - 1 do
-    if expectedIndex[i] > FRefShape[i] - 1 then
-      mappedIndex[i] := 0
-    else
-      mappedIndex[i] := expectedIndex[i];
-
-  Result := IndexToOffset(mappedIndex, FRefShape);
-end;
-
-procedure TTensorProxy.GenerateIndex;
-var
-  i: longint;
-begin
-  SetLength(FIndices, Length(FRef.Val));
-  for i := 0 to Length(FRef.Val) - 1 do
-    FIndices[i] := MapOffset(i);
-end;
-
 function TTensor.GetAt(Index: array of longint): TTensor;
 var
-  i, ResultLength, offset, LIndex, LShape: longint;
-  AdjustedIndex, ResultingShape: array of longint;
+  i, offset, amount: longint;
+  OutShape: TIntVector;
 begin
-  LIndex := Length(Index);
-  LShape := Length(self.Shape);
+  offset := 0;
+  for i := 0 to Length(Index) - 1 do
+    offset := offset + Self.Strides[i] * Index[i];
 
-  SetLength(AdjustedIndex, 0);      // fill with
-  SetLength(AdjustedIndex, LShape); // zero
+  SetLength(OutShape, Length(Self.Shape) - Length(Index));
+  amount := 1;
+  for i := Length(Index) to Length(Self.Shape) - 1 do
+  begin
+    amount := amount * Self.Shape[i];
+    OutShape[i - Length(Index)] := Self.Shape[i];
+  end;
 
-  { Suppose, the given index is [1,2] while the tensor is 4 dimensional, adjust
-    the index to [1,2,0,0], i.e., fill the remaining dimension indices with
-    zeros. }
-  for i := 0 to LIndex - 1 do
-    AdjustedIndex[i] := Index[i];
+  SetLength(Result.Val, amount+10);
+  for i := offset to offset + amount - 1 do
+  begin
+    Result.Val[i - offset] := Self.Val[i];
+  end;
 
-  offset := IndexToOffset(AdjustedIndex, self.Shape);
-
-  SetLength(ResultingShape, LShape - LIndex);
-  for i := 0 to (LShape - LIndex) - 1 do
-    ResultingShape[i] := self.Shape[i + LShape - LIndex - 1];
-
-  Result.ReshapeInplace(ResultingShape);
-
-  ResultLength := 1;
-  for i := LIndex to LShape - 1 do
-    ResultLength := ResultLength * self.Shape[i];
-
-  SetLength(Result.Val, ResultLength);
-  for i := 0 to ResultLength - 1 do
-    Result.Val[i] := self.Val[i + offset];
+  Result.ReshapeInplace(OutShape);
 end;
 
 procedure TTensor.SetAt(i: longint; x: double);
@@ -660,6 +567,8 @@ end;
 procedure TTensor.Free;
 begin
   SetLength(self.Val, 0);
+  SetLength(self.FShape, 0);
+  SetLength(self.FStrides, 0);
 end;
 
 function TTensor.GetAt(i: longint): double;
@@ -776,7 +685,6 @@ var
   T: TTensor;
 begin
   self.Create(T, AName, nil, True);
-  //self.FID := -2;
 end;
 
 constructor TVariable.Create(ATensor: TTensor);
@@ -787,10 +695,6 @@ end;
 constructor TVariable.Create(ATensor: TTensor; AName: string);
 begin
   self.Create(ATensor, AName, nil, True);
-  //if ATensor.Size = 1 then
-  //  self.FID := -1;
-  //else
-    //self.FID := -2;
 end;
 
 constructor TVariable.Create(ATensor: TTensor; AName: string;
@@ -813,10 +717,20 @@ begin
 
   self.ZeroGrad;
 
+  { we need to keep track every single node created, e.g., for later removal }
   GlobalNodeTracker.NodeSpace.Add(self);
 
   self.FID := GLOBAL_NODE_COUNT;
   Inc(GLOBAL_NODE_COUNT);
+end;
+
+destructor TVariable.Cleanup;
+var
+  v: TVariable;
+begin
+  self.Data.Free;
+  self.Grad.Free;
+  self.TrackingID:='';
 end;
 
 procedure TVariable.AddPrev(AVariable: TVariable);
@@ -900,6 +814,14 @@ begin
     arr[i].ZeroGrad;
 end;
 
+procedure Cleanup;
+var
+  N: TVariable;
+begin
+  for N in GlobalNodeTracker.NodeSpace do
+    N.Cleanup;
+end;
+
 function CopyTensor(A: TTensor): TTensor;
 begin
   Result.val := copy(A.val);
@@ -924,13 +846,14 @@ begin
     Result.Val[i] := ifthen(random > p, 0, 1);
 end;
 
-function ReadCSV(fileName: string): TTensor;
+function ReadCSV(fileName: string; NRowSkip: longint): TTensor;
 var
   s, number: string;
   sl: TStringList;
   InFile: Text;
-  RowCount, ColCount, offset: longint;
+  i, RowCount, ColCount, offset: longint;
 begin
+  Assert(FileExists(filename), 'File does not exist.');
   Assign(InFile, fileName);
   Reset(InFile);
 
@@ -949,12 +872,18 @@ begin
     ReadLn(InFile);
   end;
 
+  Dec(RowCount, NRowSkip);
+
   { actual data handle }
   Result.ReshapeInplace([RowCount, ColCount]);
   SetLength(Result.Val, RowCount * ColCount);
 
   offset := 0;
   Reset(InFile);
+
+  for i := 0 to NRowSkip - 1 do
+    ReadLn(InFile);
+
   while not EOF(InFile) do
   begin
     ReadLn(InFile, s);
@@ -979,7 +908,7 @@ begin
   Result.Strides := ShapeToStride(Shape);
 end;
 
-function CreateTensor(Shape: array of longint; Val: float): TTensor;
+function CreateTensor(Shape: array of longint; Val: NFloat): TTensor;
 var
   i: longint;
 begin
@@ -988,7 +917,7 @@ begin
     Result.Val[i] := Val;
 end;
 
-function CreateTensor(Shape: array of longint; Vals: array of float): TTensor;
+function CreateTensor(Shape: array of longint; Vals: array of NFloat): TTensor;
 var
   i, size: longint;
 begin
@@ -1212,11 +1141,11 @@ var
         begin
           dimTracker[j] := res[j];
 
-          //NewlineNum := n - j - 1;
           ithDimChanged := j; // in which dimension there is a change?
         end;
 
-      Callback(T.Val[offset], offset, res, ithDimChanged, T, OutT);
+      //writeln(offset);
+      Callback(T.Val[IndexToOffset(res, T.Shape, T.Strides)], offset, res, ithDimChanged, T, OutT);
       Inc(offset);
       exit;
     end;
@@ -1237,6 +1166,53 @@ begin
   for dtIter := 0 to n - 1 do
     dimTracker[dtIter] := 0;
   iterate(0, res);
+end;
+
+procedure cbAsStrided(val: NFloat; offset: longint; idx: TIntVector;
+    currDim: longint; var T, OutT: TTensor);
+begin
+  OutT.Val[offset] := val;
+end;
+function AsStrided(X: TTensor; TargetShape, Strides: array of longint): TTensor;
+var
+  i: longint;
+  OutStrides: TIntVector;
+begin
+  SetLength(Result.Val, ShapeToSize(TargetShape));
+
+  X.ReshapeInplace(TargetShape);
+  SetLength(OutStrides, Length(strides));
+  for i := 0 to length(Strides) - 1 do
+    OutStrides[i] := Strides[i];
+  X.Strides := OutStrides;
+
+  IterateTensor(X, Result, @cbAsStrided);
+  Result.ReshapeInplace(TargetShape);
+end;
+
+function BroadcastTo(X: TTensor; TargetShape: array of longint): TTensor;
+var
+  OutShape, OutStrides: TIntVector;
+  i: longint;
+begin
+  OutShape   := ReverseIntArr(X.Shape);
+  OutStrides := ReverseIntArr(X.Strides);
+  while length(OutShape) < Length(TargetShape) do
+  begin
+    SetLength(OutShape, Length(OutShape) + 1);
+    OutShape[Length(OutShape) - 1] := 1;
+
+    SetLength(OutStrides, Length(OutStrides) + 1);
+    OutStrides[Length(OutStrides) - 1] := 0;
+  end;
+  OutShape   := ReverseIntArr(OutShape);
+  OutStrides := ReverseIntArr(OutStrides);
+
+  for i := 0 to Length(TargetShape) - 1 do
+    if TargetShape[i] <> OutShape[i] then
+      OutStrides[i] := 0;
+
+  Result := AsStrided(X, TargetShape, OutStrides);
 end;
 
 function IsBroadcastable(A, B: TTensor): boolean;
@@ -1285,22 +1261,10 @@ begin
     Result[i] := max(revA[i], revB[i]);
 end;
 
-function Broadcast(A, B: TTensor): TBroadcastResult;
-var
-  outDim: TIntVector;
-begin
-  outDim   := GetBroadcastDims(A, B);
-  Result.A := TTensorProxy.Create(A, outDim);
-  Result.B := TTensorProxy.Create(B, outDim);
-  Result.broadcastShape := copy(outDim);
-
-end;
-
 function TileColumn(A: TTensor; n: longint): TTensor;
 var
-  i, j, OutSize: longint;
+  i, j: longint;
 begin
-  OutSize := A.Size * n;
   Result := CreateEmptyTensor([A.Shape[0], n]);
   for i := 0 to A.Shape[0] - 1 do
     for j := 0 to n-1 do
@@ -1385,7 +1349,7 @@ var
     end;
   end;
 
-  function MaxAbs(arr: array of double): double;
+  function MaxAbs(arr: array of NFloat): double;
   var
     i: double;
   begin
@@ -1428,4 +1392,7 @@ initialization
   GlobalNodeTracker.NodeSpace := TVariableList.Create;
 
   GLOBAL_NODE_COUNT := 0;
+
+finalization
+  GlobalNodeTracker.NodeSpace.Free;
 end.

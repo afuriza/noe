@@ -26,10 +26,10 @@ uses
 
 type
   { Wrapping FPC's f:R->R unary functions in math unit }
-  TUFunc = function(v: float): float;
+  TUFunc = function(v: NFloat): NFloat;
 
   { Wrapping FPC's f:RxR->R binary functions in math unit }
-  TBFunc = function(v1, v2: double): double;
+  TBFunc = function(v1, v2: NFloat): NFloat;
 
 { Helper to apply a function on each tensor's element }
 function ApplyUfunc(A: TTensor; Func: TUFunc): TTensor;
@@ -38,28 +38,38 @@ function IsBlasfuncAvailable(Func: Pointer): boolean;
 
 { Some of functions belong to system unit are in different format. Hence, they
   need to be wrapped to make them compatible. They are given suffix "F"
-  (indicating double-valued function) to avoid confusion. }
-function Sin_F(x: double): double;
-function Cos_F(x: double): double;
-function Exp_F(x: double): double;
-function Ln_F(x: double): double;
-function AddF(v1, v2: double): double;
-function SubtractF(v1, v2: double): double;
-function DivideF(v1, v2: double): double;
-function MultiplyF(v1, v2: double): double;
+  (indicating NFloat-valued function) to avoid confusion. }
+function Sin_F(x: NFloat): NFloat;
+function Cos_F(x: NFloat): NFloat;
+function Cosh_F(x: NFloat): NFloat;
+function Exp_F(x: NFloat): NFloat;
+function Ln_F(x: NFloat): NFloat;
+function Log2_F(x: NFloat): NFloat;
+function Log10_F(x: NFloat): NFloat;
+function Add_F(v1, v2: NFloat): NFloat;
+function Subtract_F(v1, v2: NFloat): NFloat;
+function Divide_F(v1, v2: NFloat): NFloat;
+function DegToRad_F(x: NFloat): NFloat;
+function Multiply_F(v1, v2: NFloat): NFloat;
+function Power_F(v1, v2: NFloat): NFloat;
+function RadToDeg_F(x: NFloat): NFloat;
+function Sinh_F(x: NFloat): NFloat;
+function Tan_F(x: NFloat): NFloat;
+function Tanh_F(x: NFloat): NFloat;
 
 { TTensor math ----------------------------------------------------------------}
 
 function Add(A, B: TTensor): TTensor;
 function ArgMax(M: TTensor): TTensor;
 function ArgMax(M: TTensor; axis: byte): TTensor; overload;
-//function Convolve2D(A, w: TTensor): TTensor;
+function Conv2D(X, w: TTensor;
+  PaddingHeight, PaddingWidth, StrideHeight, StrideWidth: longint): TTensor;
 function Cos(A: TTensor): TTensor;
 function Cosh(A: TTensor): TTensor;
 function DegToRad(A: TTensor): TTensor;
 function Divide(A, B: TTensor): TTensor;
 function Exp(A: TTensor): TTensor;
-function LeakyReLU(A: TTensor; v: double): TTensor;
+function LeakyReLU(A: TTensor; v: NFloat): TTensor;
 function Log10(A: TTensor): TTensor;
 function Log2(A: TTensor): TTensor;
 function Log(A: TTensor): TTensor;
@@ -70,7 +80,7 @@ function Max(M: TTensor; axis: byte): TTensor;
 function Mean(M: TTensor): TTensor;
 function Mean(M: TTensor; axis: byte): TTensor;
 function Multiply(A, B: TTensor): TTensor;
-function Power(A: TTensor; exponent: double): TTensor; overload;
+function Power(A: TTensor; exponent: NFloat): TTensor; overload;
 function Power(A, B: TTensor): TTensor; overload;
 function RadToDeg(A: TTensor): TTensor;
 function ReLU(T: TTensor): TTensor;
@@ -81,6 +91,8 @@ function SoftMax(A: TTensor; axis: byte): TTensor;
 function Subtract(A, B: TTensor): TTensor;
 function Sum(M: TTensor): TTensor;
 function Sum(M: TTensor; axis: byte): TTensor; overload;
+function Sum(X: TTensor; dim: longint; KeepDims: boolean = False): TTensor;
+function Sum(X: TTensor; dims: array of longint; KeepDims: boolean = False): TTensor;
 function Tan(A: TTensor): TTensor;
 function Tanh(A: TTensor): TTensor;
 function Transpose(T: TTensor; dims: array of longint): TTensor;
@@ -98,20 +110,23 @@ function Einsum(Subscripts: string; Pots: array of TTensor): TTensor;
  { TVariable math --------------------------------------------------------------}
  { forward mode }
 function Add(A, B: TVariable): TVariable;
+function Conv2D(X, w: TVariable;
+  PaddingHeight, PaddingWidth, StrideHeight, StrideWidth: longint): TVariable;
 function Cosh(A: TVariable): TVariable;
 function Divide(A, B: TVariable): TVariable;
 function Exp(A: TVariable): TVariable;
-function LeakyReLU(A: TVariable; v: double): TVariable; overload;
+function LeakyReLU(A: TVariable; v: NFloat): TVariable; overload;
 function Log(A: TVariable): TVariable;
 function Max(A: TVariable): TVariable;
 function Max(A: TVariable; axis: byte): TVariable; overload;
 function Mean(A: TVariable; axis: byte): TVariable;
 function Mean(A: TVariable): TVariable; overload;
 function Multiply(A, B: TVariable): TVariable;
-function MultiplyC(A: TVariable; x: double): TVariable;
+function MultiplyC(A: TVariable; x: NFloat): TVariable;
 function MatMul(A, B: TVariable): TVariable;
 function Negate(A: TVariable): TVariable;
 function ReLU(A: TVariable): TVariable;
+function Reshape(A: TVariable; Shape: array of longint): TVariable;
 function Sigmoid(A: TVariable): TVariable;
 function Sinh(A: TVariable): TVariable;
 function Sqr(A: TVariable): TVariable;
@@ -123,6 +138,7 @@ function Tanh(A: TVariable): TVariable;
 
 { backward mode }
 procedure BackwardAdd(arr: TVariableArr; ADy: TTensor);
+procedure BackwardConv2D(arr: TVariableArr; ADy: TTensor);
 procedure BackwardDivide(arr: TVariableArr; ADy: TTensor);
 procedure BackwardSubtract(arr: TVariableArr; ADy: TTensor);
 procedure BackwardMultiply(arr: TVariableArr; ADy: TTensor);
@@ -136,6 +152,7 @@ procedure BackwardMax(arr: TVariableArr; ADy: TTensor);
 procedure BackwardMean(arr: TVariableArr; ADy: TTensor);
 procedure BackwardNegate(arr: TVariableArr; ADy: TTensor);
 procedure BackwardReLU(arr: TVariableArr; ADy: TTensor);
+procedure BackwardReshape(arr: TVariableArr; ADy: TTensor);
 procedure BackwardSigmoid(arr: TVariableArr; ADy: TTensor);
 procedure BackwardSinh(arr: TVariableArr; ADy: TTensor);
 procedure BackwardSqr(arr: TVariableArr; ADy: TTensor);
@@ -149,31 +166,90 @@ function SoftMax(A: TVariable; axis: byte): TVariable;
 { If target is the result of broadcasting, reduce to its original shape }
 function ReduceTo(Target, Other: TTensor): TTensor;
 
+procedure CopyArrayAt(var Src, Dest: TFloatVector; offset: longint);
+
+function Col2Im(imgcol: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
+
+function Col2ImBatch(imgcol: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
+
+function Im2Col(img: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
+
+function Im2ColBatch(X: TTensor;
+  FilterH, FilterW, PaddingHeight, PaddingWidth, StrideHeight, StrideWidth:
+  longint): TTensor;
+
+
 implementation
 
-function AddF(v1, v2: double): double;
+function Log2_F(x: NFloat): NFloat;
+begin
+  Result := Math.log2(x);
+end;
+
+function Log10_F(x: NFloat): NFloat;
+begin
+  Result := Math.log10(x);
+end;
+
+function Add_F(v1, v2: NFloat): NFloat;
 begin
   Result := v1 + v2;
 end;
 
-function SubtractF(v1, v2: double): double;
+function Subtract_F(v1, v2: NFloat): NFloat;
 begin
   Result := v1 - v2;
 end;
 
-function DivideF(v1, v2: double): double;
+function Divide_F(v1, v2: NFloat): NFloat;
 begin
   Result := v1 / v2;
 end;
 
-function MultiplyF(v1, v2: double): double;
+function DegToRad_F(x: NFloat): NFloat;
+begin
+  Result := Math.degtograd(x);
+end;
+
+function Multiply_F(v1, v2: NFloat): NFloat;
 begin
   Result := v1 * v2;
 end;
 
+function Power_F(v1, v2: NFloat): NFloat;
+begin
+  Result := Math.power(v1, v2);
+end;
+
+function RadToDeg_F(x: NFloat): NFloat;
+begin
+  Result := Math.radtodeg(x);
+end;
+
+function Sinh_F(x: NFloat): NFloat;
+begin
+  Result := Math.sinh(x);
+end;
+
+function Tan_F(x: NFloat): NFloat;
+begin
+  Result := Math.tan(x);
+end;
+
+function Tanh_F(x: NFloat): NFloat;
+begin
+  Result := Math.tanh(x);
+end;
+
 function Add(A, B: TTensor): TTensor;
 begin
-  Result := ApplyBfunc(A, B, @AddF);
+  Result := ApplyBfunc(A, B, @Add_F);
 end;
 
 //function Convolve2D(A, w: TTensor): TTensor;
@@ -183,17 +259,17 @@ end;
 
 function Subtract(A, B: TTensor): TTensor;
 begin
-  Result := ApplyBfunc(A, B, @SubtractF);
+  Result := ApplyBfunc(A, B, @Subtract_F);
 end;
 
 function Divide(A, B: TTensor): TTensor;
 begin
-  Result := ApplyBfunc(A, B, @DivideF);
+  Result := ApplyBfunc(A, B, @Divide_F);
 end;
 
 function Multiply(A, B: TTensor): TTensor;
 begin
-  Result := ApplyBfunc(A, B, @MultiplyF);
+  Result := ApplyBfunc(A, B, @Multiply_F);
 end;
 
 function MatMul(A, B: TTensor): TTensor;
@@ -340,15 +416,15 @@ end;
 
 function DegToRad(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.degtorad);
+  Result := ApplyUfunc(A, @DegToRad_F);
 end;
 
 function RadToDeg(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.radtodeg);
+  Result := ApplyUfunc(A, @RadToDeg_F);
 end;
 
-function LeakyReLU(A: TTensor; v: double): TTensor;
+function LeakyReLU(A: TTensor; v: NFloat): TTensor;
 var
   i: longint;
 begin
@@ -359,12 +435,12 @@ end;
 
 function Log10(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.log10);
+  Result := ApplyUfunc(A, @Log10_F);
 end;
 
 function Log2(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.log2);
+  Result := ApplyUfunc(A, @Log2_F);
 end;
 
 function Log(A: TTensor): TTensor;
@@ -408,7 +484,7 @@ begin
       Result.Val[j * T.Shape[0] + i] := T.Val[i * T.Shape[1] + j];
 end;
 
-procedure cbTranspose(val: double; offset: longint; idx: TIntVector;
+procedure cbTranspose(val: NFloat; offset: longint; idx: TIntVector;
   currDim: longint; var T, OutT: TTensor);
 begin
   OutT.Val[offset] := val;
@@ -436,7 +512,7 @@ begin
   IterateTensor(X, Result, @cbTranspose);
 
   Result.ReshapeInplace(OutShape);
-  Result.Strides := outStrides;
+  //Result.Strides := outStrides;
 end;
 
 function ReLU(T: TTensor): TTensor;
@@ -449,24 +525,29 @@ begin
     Result.Val[i] := Max(0, T.Val[i]);
 end;
 
-function Sin_F(x: double): double;
+function Sin_F(x: NFloat): NFloat;
 begin
   Result := System.Sin(x);
 end;
 
-function Cos_F(x: double): double;
+function Cos_F(x: NFloat): NFloat;
 begin
   Result := System.Cos(x);
 end;
 
-function Exp_F(x: double): double;
+function Cosh_F(x: NFloat): NFloat;
+begin
+  Result := Math.Cosh(x);
+end;
+
+function Exp_F(x: NFloat): NFloat;
 begin
   Result := System.exp(x);
 end;
 
-function Ln_F(x: double): double;
+function Ln_F(x: NFloat): NFloat;
 begin
-  Result := system.ln(x);
+  Result := system.ln(Math.Max(x, EPS_TOL));
 end;
 
 function Sin(A: TTensor): TTensor;
@@ -481,7 +562,56 @@ end;
 
 function Sinh(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.sinh);
+  Result := ApplyUfunc(A, @Sinh_F);
+end;
+
+{ copy entire items in `Src` to `Dest` at position `offset` }
+procedure CopyArrayAt(var Src, Dest: TFloatVector; offset: longint);
+var
+  i: longint;
+begin
+  for i := 0 to High(Src) do
+    Dest[i + offset] := Src[i];
+end;
+
+function Conv2D(X, w: TTensor;
+  PaddingHeight, PaddingWidth, StrideHeight, StrideWidth: longint): TTensor;
+var
+  m, i, Channels, Height, Width, ConvOutHeight, ConvOutWidth, FilterH,
+  FilterW, offset: longint;
+  W_, res: TTensor;
+begin
+  m      := X.Shape[0];
+  Channels := X.Shape[1];
+  Height := X.Shape[2];
+  Width  := X.Shape[3];
+  FilterH := W.Shape[2];
+  FilterW := W.Shape[3];
+  ConvOutHeight := (Height + 2 * PaddingHeight - FilterH) div StrideHeight + 1;
+  ConvOutWidth := (Width + 2 * PaddingWidth - FilterW) div StrideWidth + 1;
+  W_     := W.Reshape([W.Shape[0], ConvOutHeight * ConvOutWidth]);
+
+  SetLength(Result.Val, m * W.Shape[0] * ConvOutHeight *
+    ConvOutWidth);
+
+  offset := 0;
+  for i := 0 to m - 1 do
+  begin
+    res := W_.Dot(Im2Col(X.GetAt([i]), Channels, Height, Width, FilterH,
+      FilterW, PaddingHeight, PaddingWidth, StrideHeight, StrideWidth)).T;
+
+    CopyArrayAt(res.Val, Result.Val, offset);
+
+    offset := offset + res.Size;
+  end;
+
+  {plus}
+  {bias}
+  {here}
+
+  Result.ReshapeInplace([m, res.Shape[0], res.Shape[1]]);
+  Result := Transpose(Result, [0, 2, 1]);
+  Result.ReshapeInplace([m, W.Shape[0], ConvOutWidth, ConvOutHeight]);
 end;
 
 function Cos(A: TTensor): TTensor;
@@ -491,27 +621,138 @@ end;
 
 function Cosh(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.cosh);
+  Result := ApplyUfunc(A, @Cosh_F);
+end;
+
+function Sum(X: TTensor; dim: longint; KeepDims: boolean): TTensor;
+var
+  i, j, tmp, DimSize, remSize, outSize, Offset, rep, stride: longint;
+  outShape, newDims: TIntVector;
+  tmpTensor: TTensor;
+begin
+  Assert(dim < X.NDims, 'Dimension out of bound');
+
+  { HACK: if `dim` is the highest dimension, permute tensor w.r.t. two last
+    dimensions. }
+  if dim = X.NDims - 1 then
+  begin
+    dim := dim - 1;
+    SetLength(newDims, X.NDims);
+    for i := 0 to X.NDims - 1 do
+      newDims[i] := i;
+    tmp := newDims[High(newDims)];
+    newDims[High(newDims)] := newDims[High(newDims) - 1];
+    newDims[High(newDims) - 1] := tmp;
+    X   := Transpose(X, newDims);
+  end;
+
+  { The first `dim` is a special case }
+  if dim > 0 then
+    stride := X.Strides[dim - 1]
+  else
+    stride := X.Strides[dim];
+
+  { number of 'raw' rows }
+  rep := 1;
+  if (X.NDims > 1) and (dim <> 0) then
+    if (dim = high(X.Shape)) then
+      rep := X.Shape[dim - 1]
+    else if (dim = 0) then
+      rep := X.Shape[dim + 1]
+    else
+      for i := 0 to dim - 1 do
+        rep := rep * X.Shape[i];
+
+  { given the offset at which we start, determine the block size that should
+    be grouped together }
+  remSize := 1;
+  for i := dim + 1 to X.NDims - 1 do
+    remSize := remSize * X.Shape[i];
+
+  outSize  := 1;    // the resulting size (of `Result.Val`)
+  outShape := nil;  // the resulting shape
+  for i := 0 to High(X.Shape) do
+    if dim <> i then
+    begin
+      outSize := outSize * X.Shape[i];
+      SetLength(outShape, Length(outShape) + 1);
+      outShape[Length(outShape) - 1] := X.Shape[i];
+    end
+    { do not squeeze w.r.t. `dim` if `KeepDims` is true. }
+    else if KeepDims then
+    begin
+      SetLength(outShape, Length(outShape) + 1);
+      outShape[Length(outShape) - 1] := 1;
+    end;
+
+  SetLength(Result.Val, outSize);
+  DimSize := X.Shape[dim];
+  Offset  := 0;
+  for j := 0 to rep - 1 do
+  begin
+    tmpTensor := Zeros([remSize]);
+    for i := 0 to DimSize - 1 do
+    begin
+      tmpTensor := tmpTensor + CreateTensor([remSize], Copy(X.Val, i * X.Strides[dim] +
+        j * stride, remSize));
+      CopyArrayAt(tmpTensor.Val, Result.Val, Offset);
+    end;
+    Inc(Offset, remSize);
+  end;
+
+  Result.ReshapeInplace(outShape);
+end;
+
+function Sum(X: TTensor; dims: array of longint; KeepDims: boolean): TTensor;
+var
+  i, dim: integer;
+  outShape: TIntVector;
+begin
+  Result := X;
+  for dim in dims do
+    Result := Sum(Result, dim, True);
+
+  outShape := nil;
+
+  if KeepDims then
+    SetLength(outShape, X.NDims);
+
+  for i := 0 to X.NDims - 1 do
+    if not KeepDims then
+    begin
+      if not (i in dims) then
+      begin
+        SetLength(outShape, Length(outShape) + 1);
+        outShape[Length(outShape) - 1] := X.Shape[i];
+      end;
+    end
+    else
+    if (i in dims) then
+      outShape[i] := 1
+    else
+      outShape[i] := X.Shape[i];
+
+  Result.ReshapeInplace(outShape);
 end;
 
 function Tan(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.tan);
+  Result := ApplyUfunc(A, @Tan_F);
 end;
 
 function Tanh(A: TTensor): TTensor;
 begin
-  Result := ApplyUfunc(A, @Math.tanh);
+  Result := ApplyUfunc(A, @Tanh_F);
 end;
 
-function Power(A: TTensor; exponent: double): TTensor;
+function Power(A: TTensor; exponent: NFloat): TTensor;
 begin
-  Result := ApplyBfunc(A, exponent, @Math.power);
+  Result := ApplyBfunc(A, exponent, @Power_F);
 end;
 
 function Power(A, B: TTensor): TTensor;
 begin
-  Result := ApplyBfunc(A, B, @Math.power);
+  Result := ApplyBfunc(A, B, @Power_F);
 end;
 
 function Exp(A: TTensor): TTensor;
@@ -573,7 +814,7 @@ begin
     @BackwardMultiply);
 end;
 
-function MultiplyC(A: TVariable; x: double): TVariable;
+function MultiplyC(A: TVariable; x: NFloat): TVariable;
 begin
   Result := TVariable.Create(noe.Math.Multiply(A.Data, x), 'ForwardMultiplyC',
     @BackwardMultiplyC);
@@ -598,12 +839,34 @@ begin
   CreateOrUpdateOpNode(Result, 'ForwardNegate', [A], -A.Data, @BackwardNegate);
 end;
 
+function Conv2D(X, w: TVariable;
+  PaddingHeight, PaddingWidth, StrideHeight, StrideWidth: longint): TVariable;
+var
+  HOut, WOut: longint;
+  XCol, WCol, XOut: TTensor;
+begin
+  HOut := (X.Shape[2] - w.Shape[2] + 2 * PaddingHeight) div StrideHeight + 1;
+  WOut := (X.Shape[3] - w.Shape[3] + 2 * PaddingWidth) div StrideWidth + 1;
+
+  XCol := Im2ColBatch(X.Data, w.Shape[2], w.Shape[3], PaddingHeight,
+    PaddingWidth, StrideHeight, StrideWidth);
+  WCol := w.Data.Reshape([w.Shape[0], w.Shape[1] * w.Shape[2] * w.Shape[3]]);
+  XOut := WCol.Dot(XCol).Reshape([w.Shape[0], HOut, WOut, X.Shape[0]]);
+  XOut := Transpose(XOut, [3, 0, 1, 2]);
+
+  //writeln('im2col shape: ', XCol.Shape[0], ' ', XCol.Shape[1]);
+
+  CreateOrUpdateOpNode(Result, 'ForwardConv2D', [X, w, PaddingHeight,
+    PaddingWidth, StrideHeight, StrideWidth, XCol],
+    XOut, @BackwardConv2D);
+end;
+
 function Cosh(A: TVariable): TVariable;
 begin
   CreateOrUpdateOpNode(Result, 'ForwardCosh', [A], Cosh(A.Data), @BackwardCosh);
 end;
 
-function LeakyReLU(A: TVariable; v: double): TVariable;
+function LeakyReLU(A: TVariable; v: NFloat): TVariable;
 begin
   CreateOrUpdateOpNode(Result, 'ForwardLeakyReLU', [A, v], LeakyReLU(A.Data, v),
     @BackwardLeakyReLU);
@@ -612,6 +875,11 @@ end;
 function Log(A: TVariable): TVariable;
 begin
   CreateOrUpdateOpNode(Result, 'ForwardLog', [A], Log(A.Data), @BackwardLn);
+end;
+
+function Reshape(A: TVariable; Shape: array of longint): TVariable;
+begin
+  CreateOrUpdateOpNode(Result, 'ForwardReshape', [A], A.Data.Reshape(Shape), @BackwardReshape);
 end;
 
 function Sigmoid(A: TVariable): TVariable;
@@ -685,22 +953,208 @@ function SoftMax(A: TVariable; axis: byte): TVariable;
 var
   X, Y: TVariable;
 begin
-  //X      := ;
-  //Y      := ;
   Result := Exp((A - Max(A, axis))) / sum(Exp((A - Max(A, axis))), axis);
 end;
 
 function ReduceTo(Target, Other: TTensor): TTensor;
 var
-  ax, i: longint;
+  i: integer;
+  dims, shape1, shape2: array of longint;
 begin
   Result := Target;
-  ax     := -1;
-  for i := 0 to Length(Target.Shape) - 1 do
-    if Target.Shape[i] > Other.Shape[i] then
-      ax := i;
-  if ax > -1 then
-    Result := Sum(Target, ax);
+
+  shape1 := (Target.Shape);
+  shape2 := (Other.Shape);
+
+  SetLength(shape1, Math.Max(Length(shape1), length(shape2)));
+  SetLength(shape2, Math.Max(Length(shape1), length(shape2)));
+
+  dims := nil;
+  for i := 0 to Length(shape2) - 1 do
+    if Shape2[i] <> Shape1[i] then
+    begin
+      SetLength(dims, Length(dims) + 1);
+      dims[Length(dims) - 1] := i;
+    end;
+
+  if Length(dims) > 0 then
+  begin
+    Result := Sum(Result, dims);
+    Result.ReshapeInplace(other.shape);
+  end;
+end;
+
+function Im2ColGetPixel(img: TTensor;
+  Height, Width, channels, row, col, channel, padH, padW: longint): NFloat;
+var
+  r, c: longint;
+begin
+  r := row - padH;
+  c := col - padW;
+
+  if ((r < 0) or (c < 0) or (r >= Height) or (c >= Width)) then
+    Exit(0);
+  Exit(img.Val[c + Width * (r + Height * channel)]);
+end;
+
+function Im2ColGetPixel(img: TTensor;
+  imgIdx, Height, Width, channels, row, col, channel, padH, padW: longint): NFloat;
+var
+  r, c: longint;
+begin
+  r := row - padH;
+  c := col - padW;
+
+  writeln(Height);
+
+  if ((r < 0) or (c < 0) or (r >= Height) or (c >= Width)) then
+    Exit(0);
+  Exit(img.Val[c + Width * (r + Height * channel)]);
+end;
+
+procedure Col2ImAddPixel(var img: TTensor;
+  Height, Width, channels, row, col, channel, padH, padW: longint; val: NFloat);
+var
+  r, c: longint;
+begin
+  r := row - padH;
+  c := col - padW;
+
+  if ((r < 0) or (c < 0) or (r >= Height) or (c >= Width)) then
+    Exit;
+  img.Val[c + Width * (r + Height * channel)] := val;
+end;
+
+function Col2Im(imgcol: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
+var
+  ColHeight, ColWidth: longint;
+  ChannelsCol, c, h, w, wOffset, hOffset, cIm, hIm, wIm: longint;
+begin
+  ColHeight   := (Height + 2 * PaddingHeight - FilterH) div StrideHeight + 1;
+  ColWidth    := (Width + 2 * PaddingWidth - FilterW) div StrideWidth + 1;
+  ChannelsCol := Channels * FilterH * FilterW;
+
+  SetLength(Result.Val, Channels * Height * Width);
+  Result.ReshapeInplace([Channels, Height, Width]);
+
+  for c := 0 to ChannelsCol - 1 do
+  begin
+    wOffset := c mod FilterW;
+    hOffset := (c div FilterW) mod FilterH;
+    cIm     := c div FilterH div FilterW;
+    for h := 0 to ColHeight - 1 do
+    begin
+      hIm := h * StrideHeight - PaddingHeight + hOffset;
+      for w := 0 to ColWidth - 1 do
+      begin
+        wIm := w * StrideWidth - PaddingWidth + wOffset;
+
+        if (hIm >= 0) and (hIm < Height) and (wIm >= 0) and (wIm < Width) then
+          Result.Val[(cIm * Height + hIm) * Width + wIm] :=
+            Result.Val[(cIm * Height + hIm) * Width + wIm] + imgcol.Val[
+            (c * ColHeight + h) * ColWidth + w];
+      end;
+    end;
+  end;
+
+end;
+
+function Col2ImBatch(imgcol: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
+var
+  ConvOutHeight, ConvOutWidth, sz, i, m, Offset: longint;
+  tmpImgCol: TTensor;
+begin
+  ConvOutHeight := (Height + 2 * PaddingHeight - FilterH) div StrideHeight + 1;
+  ConvOutWidth  := (Width + 2 * PaddingWidth - FilterW) div StrideWidth + 1;
+
+  { size of a single im2col }
+  sz := Channels * FilterH * FilterW * ConvOutHeight * ConvOutWidth;
+
+  { number of sample }
+  m := imgcol.Size div sz;
+
+  tmpImgCol := Transpose(imgcol.Reshape([Channels * FilterH * FilterW,
+    m, ConvOutHeight * ConvOutWidth]), [1, 0, 2]);
+
+  Offset := 0;
+  SetLength(Result.Val, m * Channels * Height * Width);
+  for i := 0 to m - 1 do
+  begin
+    CopyArrayAt(Col2Im(tmpImgCol.GetAt([i]), Channels, Height, Width,
+      FilterH, FilterW, PaddingHeight, PaddingWidth, StrideHeight, StrideWidth).val,
+      Result.Val, Offset);
+    Inc(Offset, Channels * Height * Width);
+  end;
+  Result.ReshapeInplace([m, Channels, Height, Width]);
+end;
+
+function Im2Col(img: TTensor;
+  Channels, Height, Width, FilterH, FilterW, PaddingHeight, PaddingWidth,
+  StrideHeight, StrideWidth: longint): TTensor;
+var
+  ConvOutHeight, ConvOutWidth: longint;
+  ChannelsCol, c, h, w, wOffset, hOffset, cIm: longint;
+  ImRow, ImCol, colIdx: longint;
+begin
+  ConvOutHeight := (Height + 2 * PaddingHeight - FilterH) div StrideHeight + 1;
+  ConvOutWidth  := (Width + 2 * PaddingWidth - FilterW) div StrideWidth + 1;
+  ChannelsCol   := Channels * FilterH * FilterW;
+
+  SetLength(Result.Val, Channels * FilterH * FilterW * ConvOutHeight * ConvOutWidth);
+  Result.ReshapeInplace([Channels * FilterH * FilterW, ConvOutHeight * ConvOutWidth]);
+  for c := 0 to ChannelsCol - 1 do
+  begin
+    wOffset := c mod FilterW;
+    hOffset := (c div FilterW) mod FilterH;
+    cIm     := c div FilterH div FilterW;
+    for h := 0 to ConvOutHeight - 1 do
+      for w := 0 to ConvOutWidth - 1 do
+      begin
+        ImRow  := hOffset + h * StrideHeight;
+        ImCol  := wOffset + w * StrideWidth;
+        colIdx := (c * ConvOutHeight + h) * ConvOutWidth + w;
+
+        Result.Val[colIdx] := Im2ColGetPixel(img, Height, Width,
+          Channels, ImRow, ImCol, cIm, PaddingHeight, PaddingWidth);
+      end;
+  end;
+end;
+
+function Im2ColBatch(X: TTensor;
+  FilterH, FilterW, PaddingHeight, PaddingWidth, StrideHeight, StrideWidth:
+  longint): TTensor;
+var
+  m, ConvOutHeight, ConvOutWidth: longint;
+  i: longint;
+  Height, Width, channels, Offset, sz: longint;
+begin
+  m      := X.Shape[0];
+  Height := X.Shape[2];
+  Width  := X.Shape[3];
+  channels := X.Shape[1];
+  ConvOutHeight := (Height + 2 * PaddingHeight - FilterH) div StrideHeight + 1;
+  ConvOutWidth := (Width + 2 * PaddingWidth - FilterW) div StrideWidth + 1;
+
+  { size of a single im2col }
+  sz := Channels * FilterH * FilterW * ConvOutHeight * ConvOutWidth;
+
+  SetLength(Result.Val, sz * m);
+  Result.ReshapeInplace([m, Channels * FilterH * FilterW, ConvOutHeight * ConvOutWidth]);
+  Offset := 0;
+  for i := 0 to m - 1 do
+  begin
+    CopyArrayAt(Im2Col(X.GetAt([i]), channels, Height, Width, FilterH,
+      FilterW, PaddingHeight, PaddingWidth, StrideHeight, StrideWidth).Val,
+      Result.Val, Offset);
+    Offset := Offset + sz;
+  end;
+
+  Result := Transpose(Result, [1, 0, 2]).Reshape([Channels * FilterH *
+    FilterW, m * ConvOutHeight * ConvOutWidth]);
 end;
 
 procedure BackwardAdd(arr: TVariableArr; ADy: TTensor);
@@ -711,6 +1165,33 @@ begin
     arr[1].Grad := arr[1].Grad + ReduceTo(ADy, arr[1].Data);
 end;
 
+procedure BackwardConv2D(arr: TVariableArr; ADy: TTensor);
+var
+  DyReshaped, dX, dW, dXCol, wReshape: TTensor;
+  i: longint;
+begin
+  { Note the passed sequence from forward pass:
+    arr -->[X, w, PaddingHeight, PaddingWidth, StrideHeight, StrideWidth, XCol],
+            0  1        2             3             4            5         6}
+
+  DyReshaped := Transpose(ADy, [1, 2, 3, 0]).Reshape([arr[1].Shape[0],
+    ADy.Size div arr[1].Shape[0]]);
+  wReshape := arr[1].Data.Reshape([arr[1].Shape[0], arr[1].Shape[1] *
+    arr[1].Shape[2] * arr[1].Shape[3]]);
+  dXCol := wReshape.T.Dot(DyReshaped);
+  dX := Col2ImBatch(dXCol,
+    arr[0].Shape[1], arr[0].Shape[2], arr[0].Shape[3],
+    arr[1].Shape[2], arr[1].Shape[3],
+    round(arr[2].Data.Val[0]), round(arr[3].Data.Val[0]),
+    round(arr[4].Data.Val[0]), round(arr[5].Data.Val[0]));
+
+  dW := DyReshaped.Dot(arr[6].Data.T).Reshape(arr[1].Shape);
+
+  if arr[0].RequiresGrad then
+    arr[0].Grad := arr[0].Grad + dX;
+  if arr[1].RequiresGrad then
+    arr[1].Grad := arr[1].Grad + dW;
+end;
 
 procedure BackwardDivide(arr: TVariableArr; ADy: TTensor);
 var
@@ -770,6 +1251,12 @@ procedure BackwardCosh(arr: TVariableArr; ADy: TTensor);
 begin
   if arr[0].RequiresGrad then
     arr[0].Grad := arr[0].Grad + (ADy * noe.Math.Sinh(arr[0].Data));
+end;
+
+procedure BackwardReshape(arr: TVariableArr; ADy: TTensor);
+begin
+  if arr[0].RequiresGrad then
+    arr[0].Grad := arr[0].Grad + ADy.Reshape(arr[0].Shape);
 end;
 
 procedure BackwardSigmoid(arr: TVariableArr; ADy: TTensor);
@@ -851,7 +1338,7 @@ end;
 
 procedure BackwardMax(arr: TVariableArr; ADy: TTensor);
 var
-  maxval: double;
+  maxval: NFloat;
   A: TTensor;
   i: integer;
 begin
@@ -900,7 +1387,7 @@ var
   forMultiPlying: TFloatVector;
   dims, combos, broadcastCombos: TIntVectorArr;
   s: string;
-  plug, Value, v: double;
+  plug, Value, v: NFloat;
 
   function Combo(dimension: array of longint): TIntVectorArr;
   var
@@ -1072,16 +1559,14 @@ end;
 function ApplyBfunc(A, B: TTensor; Func: TBFunc): TTensor;
 var
   i: longint;
-  br: TBroadcastResult;
   A_bcast, B_bcast: TTensor;
   outdim: TIntVector;
 begin
   { if the dimensions are the same, perform usual element-wise operation }
   if IntVectorEquals(A.Shape, B.Shape) then
   begin
-
     { ---------- If you can BLAS it, BLAS it ---------- }
-    if (Func = @AddF) and IsBlasfuncAvailable(blas_daxpy) then
+    if (Func = @Add_F) and IsBlasfuncAvailable(blas_daxpy) then
       exit(Add_BLAS(A, B));
 
     { ---------- Otherwise, go vanilla ---------- }
@@ -1098,10 +1583,8 @@ begin
     { If either one is a scalar, i.e., A.Size=1 or B.Size=1 }
     if (B.Size = 1) then
     begin
-      //Writeln('tensor-scalar broadcasting');
+      { tensor-scalar broadcasting. }
       Result := CreateEmptyTensor(A.Shape);
-      //SetLength(Result.Val, ShapeToSize(A.Shape));
-      //Result.ReshapeInplace(A.Shape);
       for i := 0 to Length(A.Val) - 1 do
         Result.Val[i] := Func(A.Val[i], B.Val[0]);
       exit;
@@ -1109,10 +1592,8 @@ begin
 
     if (A.Size = 1) then
     begin
-      //Writeln('scalar-tensor broadcasting');
+      { scalar-tensor broadcasting. }
       Result := CreateEmptyTensor(B.Shape);
-      //SetLength(Result.Val, ShapeToSize(B.Shape));
-      //Result.ReshapeInplace(B.Shape);
       for i := 0 to Length(B.Val) - 1 do
         Result.Val[i] := Func(A.Val[0], B.Val[i]);
       exit;
@@ -1124,11 +1605,10 @@ begin
       "tile" it to match the output shape. The trade-off is storage complexity. }
     if (A.NDims = 2) and (B.NDims = 2) then
     begin
-      //Writeln('2-tensor-2-tenspr tensor broadcast bfunc.');
-      //Writeln('Correcting...');
-
+      { 2-tensor-2-tenspr tensor broadcast bfunc. }
       outdim := GetBroadcastDims(a, b);
-      //handle A
+
+      // handle A
       if A.Shape[0] < outdim[0] then
         A_bcast := TileRow(A, outdim[0])
       else if A.Shape[1] < outdim[1] then
@@ -1136,7 +1616,7 @@ begin
       else
         A_bcast := A;
 
-      //handle B
+      // handle B
       if B.Shape[0] < outdim[0] then
         B_bcast := TileRow(B, outdim[0])
       else if B.Shape[1] < outdim[1] then
@@ -1149,17 +1629,14 @@ begin
     end
     else
     begin
-      //Writeln('General tensor broadcast bfunc');
+      { General tensor broadcast bfunc }
+      outdim := GetBroadcastDims(A, B);
+      if not IntVectorEquals(A.Shape, outdim) then
+        A := BroadcastTo(A, outdim);
+      if not IntVectorEquals(B.Shape, outdim) then
+        B := BroadcastTo(B, outdim);
 
-      { Otherwise, perform general broadcasting with any dimension }
-      br := Broadcast(A, B);
-
-      Result.ReshapeInplace(br.broadcastShape);
-      SetLength(Result.Val, ShapeToSize(br.broadcastShape));
-
-      { apply binary function }
-      for i := 0 to ShapeToSize(br.broadcastShape) - 1 do
-        Result.Val[i] := Func(br.A.Val[i], br.B.Val[i]);
+      Result := ApplyBfunc(A, B, Func);
     end;
   end;
 end;

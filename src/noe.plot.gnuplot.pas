@@ -122,8 +122,8 @@ begin
   fig.Palette := 'grey';
 
   plot := TPlot.Create;
-  plot.SetDataPoints(VFlip(img));
   plot.PlotType := ptImage;
+  plot.SetDataPoints(VFlip(img));
 
   fig.AddPlot(plot);
   fig.Show;

@@ -27,10 +27,14 @@ type
   TDoubleIntMap = specialize TFPGMap<double, longint>;
 
   { One-hot encode categorical labels }
+
+  { TOneHotEncoder }
+
   TOneHotEncoder = class
     unique: TDoubleList;
     function Encode(T: TTensor): TTensor;
     function Decode(T: TTensor): TTensor;
+    procedure Cleanup;
   private
     LabelToIndexMap: TDoubleIntMap;
   end;
@@ -49,6 +53,7 @@ procedure VisualizeMatrix(T: TTensor);
 operator in (substr, mainstr: string) b: boolean;
 operator in (str: string; arr: array of string) b: boolean;
 operator in (x: double; arr: array of double) b: boolean;
+operator in (x: longint; arr: array of longint) b: boolean;
 operator = (a, b: array of longint) c: boolean;
 
 implementation
@@ -198,6 +203,19 @@ begin
     end;
 end;
 
+operator in(x: longint; arr: array of longint)b: boolean;
+var
+  i: longint;
+begin
+  result := false;
+  for i:=0 to length(arr)-1 do
+    if x = arr[i] then
+    begin
+      result := true;
+      exit;
+    end;
+end;
+
 operator = (a, b: array of longint) c: boolean;
 var
   i: longint;
@@ -238,6 +256,8 @@ begin
   { Actual data handling }
   for row := 0 to Result.Shape[0] - 1 do
     Result.SetAt(row, LabelToIndexMap.KeyData[T.Val[row]], 1.0);
+
+  FreeAndNil(LabelToIndexMap);
 end;
 
 function TOneHotEncoder.Decode(T: TTensor): TTensor;
@@ -252,6 +272,12 @@ begin
   SetLength(Result.Val, Indices.Size);
   for i := 0 to Indices.Size - 1 do
     Result.SetAt(i, unique[Round(Indices.GetAt(i))]);
+end;
+
+procedure TOneHotEncoder.Cleanup;
+begin
+  FreeAndNil(unique);
+  FreeAndNil(LabelToIndexMap);
 end;
 
 
